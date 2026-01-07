@@ -1,0 +1,222 @@
+[
+  {
+    "idx": 0,
+    "id": "047eea4d-8da6-43db-8df2-d8810609f617",
+    "book_id": "ca242a0d-f7b2-4dd6-b623-0a1b32ed1221",
+    "user_id": "07107f8e-a9d5-4121-9e29-91e62fec3115",
+    "rating": 4,
+    "review": "This is fantastic",
+    "created_at": "2025-08-05 04:13:04.319528+00",
+    "updated_at": "2025-08-05 04:13:15.621+00"
+  },
+  {
+    "idx": 1,
+    "id": "18ea53ea-ce0f-41fd-b8ed-fd803c2d411b",
+    "book_id": "965e2e5b-858c-43ef-8f1c-976e7f0a5721",
+    "user_id": "c12776e4-8ce3-4776-8330-1cafc24339c2",
+    "rating": 5,
+    "review": "interesting book",
+    "created_at": "2025-08-21 04:56:22.634428+00",
+    "updated_at": "2025-08-21 04:57:01.111+00"
+  },
+  {
+    "idx": 2,
+    "id": "1fc0c48b-e6ae-4a33-8771-d0d46a573ca2",
+    "book_id": "8d1fc1e6-49ac-4dd1-8403-f0f4de7117dd",
+    "user_id": "07107f8e-a9d5-4121-9e29-91e62fec3115",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-06-28 09:47:25.012221+00",
+    "updated_at": "2025-06-28 09:47:25.573+00"
+  },
+  {
+    "idx": 3,
+    "id": "457bd59f-fdc7-4e2c-992e-cda0c7d65b2d",
+    "book_id": "5ada5d11-b161-4f04-8b67-92a8854cf18d",
+    "user_id": "953de033-95b3-4cde-94be-71776d529b46",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-08-06 15:39:22.383227+00",
+    "updated_at": "2025-08-06 15:39:26.185+00"
+  },
+  {
+    "idx": 4,
+    "id": "5c7a9947-f7d7-4845-b221-8e515a591014",
+    "book_id": "6bfa950d-16e7-4130-bbd3-6bde2acc5711",
+    "user_id": "c7ad5412-4b17-4270-a81e-25487af9a378",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-06-29 06:19:16.960425+00",
+    "updated_at": "2025-06-29 06:19:16.29+00"
+  },
+  {
+    "idx": 5,
+    "id": "689f806b-c0ae-477a-a862-9454fbf9db1b",
+    "book_id": "0c378bb6-7d0d-4b0e-bc9d-ca80fcb35ef5",
+    "user_id": "c12776e4-8ce3-4776-8330-1cafc24339c2",
+    "rating": 5,
+    "review": "Interesting An exceptional blend of elegance and substance — this book captivates with its flawless design, rich content, and timeless quality.",
+    "created_at": "2025-07-23 17:03:49.779456+00",
+    "updated_at": "2025-08-09 08:43:15.473+00"
+  },
+  {
+    "idx": 6,
+    "id": "6f18588d-2584-412d-80e8-d243e50789b5",
+    "book_id": "6b9e7c04-5c84-4cd7-97c9-35837d597550",
+    "user_id": "c12776e4-8ce3-4776-8330-1cafc24339c2",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-08-19 05:59:24.436418+00",
+    "updated_at": "2025-08-19 05:59:24.374+00"
+  },
+  {
+    "idx": 7,
+    "id": "7101db52-e3f6-4841-b821-f7b0ab34c07b",
+    "book_id": "9f138026-4836-4922-9ff8-c2e97610a202",
+    "user_id": "61e3db52-fac1-4c00-8fbf-75287ed8084a",
+    "rating": 3,
+    "review": "Exactly! This is a great way to describe the book's exploration of good vs. evil.",
+    "created_at": "2025-09-05 15:04:05.142878+00",
+    "updated_at": "2025-09-05 15:06:23.599+00"
+  },
+  {
+    "idx": 8,
+    "id": "796a73b8-7f59-4238-b62b-ee9465a39f83",
+    "book_id": "0c378bb6-7d0d-4b0e-bc9d-ca80fcb35ef5",
+    "user_id": "07107f8e-a9d5-4121-9e29-91e62fec3115",
+    "rating": 5,
+    "review": "We are proud to present the first ever Children magazine from saMas charity.",
+    "created_at": "2025-07-11 09:37:23.111638+00",
+    "updated_at": "2025-07-11 09:41:11.629+00"
+  },
+  {
+    "idx": 9,
+    "id": "8e541478-e5eb-44bc-ba99-6224ecb8093c",
+    "book_id": "2b0b319d-4976-485b-aa12-9ed570d0c759",
+    "user_id": "80d3507a-7ff3-4279-8d69-fbf437e2f28e",
+    "rating": 3,
+    "review": "Interesting ",
+    "created_at": "2025-07-22 08:35:02.892452+00",
+    "updated_at": "2025-07-22 08:35:25.647+00"
+  },
+  {
+    "idx": 10,
+    "id": "90a394c2-ee2d-4c5c-b1f0-03cf1c77b243",
+    "book_id": "f45c2c0d-7fea-4eb6-90de-1a8eb49d338c",
+    "user_id": "c12776e4-8ce3-4776-8330-1cafc24339c2",
+    "rating": 5,
+    "review": "Interesting",
+    "created_at": "2025-08-11 05:54:04.875966+00",
+    "updated_at": "2025-08-11 05:54:35.425+00"
+  },
+  {
+    "idx": 11,
+    "id": "962853bb-1a39-4935-9a99-a66308501b86",
+    "book_id": "8d1fc1e6-49ac-4dd1-8403-f0f4de7117dd",
+    "user_id": "108d1b96-ecaf-4193-9116-b1122413c18d",
+    "rating": 4,
+    "review": "",
+    "created_at": "2025-06-30 04:27:40.192063+00",
+    "updated_at": "2025-06-30 04:27:40.232+00"
+  },
+  {
+    "idx": 12,
+    "id": "9ab87cb4-7d59-475c-bf82-c87c053d91cf",
+    "book_id": "60f5642b-28ad-44b2-b705-6d8913c06b2b",
+    "user_id": "a42e7b4b-f81e-4a71-b339-7a636f249951",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-07-12 05:54:54.687524+00",
+    "updated_at": "2025-07-12 05:59:01.112+00"
+  },
+  {
+    "idx": 13,
+    "id": "9c80a41d-2eba-459c-8310-927fd05210ec",
+    "book_id": "4c72e466-8599-41ad-83ca-18822f3cf091",
+    "user_id": "07107f8e-a9d5-4121-9e29-91e62fec3115",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-06-30 07:47:10.280118+00",
+    "updated_at": "2025-06-30 07:47:10.478+00"
+  },
+  {
+    "idx": 14,
+    "id": "a5c07047-90a2-40fa-b952-475dcd502fa6",
+    "book_id": "23462e25-6531-4609-8bff-78b61df95e5f",
+    "user_id": "61e3db52-fac1-4c00-8fbf-75287ed8084a",
+    "rating": 2,
+    "review": "Interesting book ",
+    "created_at": "2025-08-21 05:19:45.524979+00",
+    "updated_at": "2025-08-21 06:51:19.161+00"
+  },
+  {
+    "idx": 15,
+    "id": "ac65b61b-aee5-4e36-8714-d9380bb01552",
+    "book_id": "23462e25-6531-4609-8bff-78b61df95e5f",
+    "user_id": "c12776e4-8ce3-4776-8330-1cafc24339c2",
+    "rating": 5,
+    "review": "This is a very good and helpful book—truly amazing.",
+    "created_at": "2025-08-21 05:11:59.986299+00",
+    "updated_at": "2025-08-21 05:13:34.174+00"
+  },
+  {
+    "idx": 16,
+    "id": "c4f144f3-514a-40ff-a0f6-4d3390591fab",
+    "book_id": "0d360e09-caaa-4fc9-8423-4f1f53aea5f4",
+    "user_id": "505cf229-c614-4122-a789-467ca8d74767",
+    "rating": 5,
+    "review": "Highly Recommended! \"The Story of My Life\" is an essential read for anyone seeking a powerful narrative of human potential. It serves as a timeless reminder that courage, communication, and unwavering belief in oneself—and in others—can conquer even the most daunting obstacles.",
+    "created_at": "2025-07-19 14:36:24.593907+00",
+    "updated_at": "2025-07-19 14:41:15.235+00"
+  },
+  {
+    "idx": 17,
+    "id": "c5f26002-36eb-4cc5-ba00-274b8b5e9586",
+    "book_id": "d50e674b-b557-4018-9d0a-d2c1429242d5",
+    "user_id": "f74dee74-2b09-4e31-94ac-70d054bd7bf4",
+    "rating": 5,
+    "review": "",
+    "created_at": "2025-07-20 05:57:33.773884+00",
+    "updated_at": "2025-07-20 05:57:33.672+00"
+  },
+  {
+    "idx": 18,
+    "id": "dcde1e05-e15a-419c-baf7-0a9f3f6d6b35",
+    "book_id": "60f5642b-28ad-44b2-b705-6d8913c06b2b",
+    "user_id": "0b0357a5-9e92-4900-adc2-6aa5d521ee62",
+    "rating": 5,
+    "review": "reading this book\n",
+    "created_at": "2025-07-12 05:54:33.239608+00",
+    "updated_at": "2025-07-12 05:55:25.385+00"
+  },
+  {
+    "idx": 19,
+    "id": "e1469992-bc11-4a61-93e8-a01342249ae6",
+    "book_id": "af7604f7-87f8-4862-83be-ad882232ec4c",
+    "user_id": "61e3db52-fac1-4c00-8fbf-75287ed8084a",
+    "rating": 3,
+    "review": "",
+    "created_at": "2025-08-05 05:31:07.436056+00",
+    "updated_at": "2025-08-05 05:31:08.799+00"
+  },
+  {
+    "idx": 20,
+    "id": "f105f5d0-ce5f-4fb4-b944-86ee79de99f7",
+    "book_id": "2a5e210a-56bd-4763-9b9c-0f56fd79bebe",
+    "user_id": "80d3507a-7ff3-4279-8d69-fbf437e2f28e",
+    "rating": 5,
+    "review": "Interesting 🤔",
+    "created_at": "2025-07-22 08:38:58.808006+00",
+    "updated_at": "2025-07-22 08:39:28.627+00"
+  },
+  {
+    "idx": 21,
+    "id": "faa8da39-68c0-4a02-9ff7-48a900b40ae3",
+    "book_id": "6b0df811-8cb7-4ded-90e8-9de0d1ec0841",
+    "user_id": "355aed9b-2c13-4451-b883-232c60f24741",
+    "rating": 4,
+    "review": "",
+    "created_at": "2025-07-16 17:14:40.038391+00",
+    "updated_at": "2025-07-16 17:14:39.135+00"
+  }
+]

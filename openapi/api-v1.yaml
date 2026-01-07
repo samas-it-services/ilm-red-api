@@ -1,0 +1,3656 @@
+openapi: 3.1.0
+info:
+  title: ILM Red API
+  description: |
+    Cloud-native API for digital knowledge management platform.
+
+    ## Authentication
+
+    The API supports two authentication methods:
+
+    1. **Bearer Token (JWT)**: Include the JWT in the `Authorization` header
+       ```
+       Authorization: Bearer eyJhbGciOiJSUzI1NiI...
+       ```
+
+    2. **API Key**: Include your API key in the `X-API-Key` header
+       ```
+       X-API-Key: ilm_live_abc123...
+       ```
+
+    ## Rate Limiting
+
+    | Tier       | Requests/min | AI Tokens/day |
+    |------------|--------------|---------------|
+    | Free       | 60           | 10,000        |
+    | Premium    | 300          | 100,000       |
+    | Enterprise | 1,000        | Unlimited     |
+
+    Rate limit headers are included in all responses:
+    - `X-RateLimit-Limit`
+    - `X-RateLimit-Remaining`
+    - `X-RateLimit-Reset`
+
+    ## Pagination
+
+    List endpoints support pagination with `page` and `limit` query parameters.
+    Response includes a `pagination` object with total count and page info.
+
+  version: 1.0.0
+  contact:
+    name: ILM Red Support
+    email: support@ilm-red.com
+    url: https://docs.ilm-red.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.ilm-red.com/v1
+    description: Production
+  - url: https://api-staging.ilm-red.com/v1
+    description: Staging
+  - url: http://localhost:3000/v1
+    description: Development
+
+tags:
+  - name: Authentication
+    description: User authentication and token management
+  - name: Books
+    description: Book management operations
+  - name: Users
+    description: User profile and social operations
+  - name: Search
+    description: Search and discovery
+  - name: AI
+    description: AI chat and analysis
+  - name: Clubs
+    description: Book club management
+  - name: Progress
+    description: Reading progress tracking
+  - name: Admin
+    description: Administrative operations
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  # ============= AUTHENTICATION =============
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login with email/password
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/oauth/{provider}:
+    get:
+      tags:
+        - Authentication
+      summary: Initiate OAuth flow
+      operationId: oauthStart
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft, github]
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to OAuth provider
+
+  /auth/oauth/{provider}/callback:
+    post:
+      tags:
+        - Authentication
+      summary: OAuth callback
+      operationId: oauthCallback
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft, github]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - code_verifier
+              properties:
+                code:
+                  type: string
+                code_verifier:
+                  type: string
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout and invalidate tokens
+      operationId: logout
+      responses:
+        '204':
+          description: Logged out successfully
+
+  /auth/api-keys:
+    get:
+      tags:
+        - Authentication
+      summary: List API keys
+      operationId: listApiKeys
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+    post:
+      tags:
+        - Authentication
+      summary: Create API key
+      operationId: createApiKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyWithSecret'
+
+  /auth/api-keys/{keyId}:
+    delete:
+      tags:
+        - Authentication
+      summary: Revoke API key
+      operationId: revokeApiKey
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: API key revoked
+
+  # ============= BOOKS =============
+  /books:
+    get:
+      tags:
+        - Books
+      summary: List books
+      operationId: listBooks
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: visibility
+          in: query
+          schema:
+            type: string
+            enum: [public, private, friends]
+        - name: category
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/BookCategory'
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, title, rating, views]
+            default: createdAt
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of books
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Books
+      summary: Upload a new book
+      operationId: createBook
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - title
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF, EPUB, or TXT file (max 500MB)
+                title:
+                  type: string
+                  maxLength: 500
+                author:
+                  type: string
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 5000
+                category:
+                  $ref: '#/components/schemas/BookCategory'
+                visibility:
+                  type: string
+                  enum: [public, private, friends]
+                  default: private
+                language:
+                  type: string
+                  description: ISO 639-1 language code
+      responses:
+        '201':
+          description: Book created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '413':
+          description: File too large
+
+  /books/{bookId}:
+    get:
+      tags:
+        - Books
+      summary: Get book details
+      operationId: getBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Book details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Books
+      summary: Update book metadata
+      operationId: updateBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 500
+                author:
+                  type: string
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 5000
+                category:
+                  $ref: '#/components/schemas/BookCategory'
+                visibility:
+                  type: string
+                  enum: [public, private, friends]
+      responses:
+        '200':
+          description: Book updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Books
+      summary: Delete a book
+      operationId: deleteBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '204':
+          description: Book deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /books/{bookId}/download:
+    get:
+      tags:
+        - Books
+      summary: Get download URL
+      operationId: downloadBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Signed download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  /books/{bookId}/thumbnail:
+    put:
+      tags:
+        - Books
+      summary: Regenerate thumbnail
+      operationId: regenerateThumbnail
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '202':
+          description: Thumbnail regeneration started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  # ============= PAGE IMAGES =============
+  /books/{bookId}/pages:
+    get:
+      tags:
+        - Books
+      summary: List book pages with image URLs
+      description: Get paginated list of all pages with signed URLs for each resolution
+      operationId: listBookPages
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: resolution
+          in: query
+          description: Filter by specific resolution
+          schema:
+            type: string
+            enum: [thumbnail, medium, high-res, ultra]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Page manifest with URLs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageManifest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /books/{bookId}/pages/{pageNumber}:
+    get:
+      tags:
+        - Books
+      summary: Get specific page image URL
+      description: Get signed URL for a specific page at requested resolution
+      operationId: getBookPage
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: pageNumber
+          in: path
+          required: true
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+        - name: resolution
+          in: query
+          description: Desired resolution (default medium)
+          schema:
+            type: string
+            enum: [thumbnail, medium, high-res, ultra]
+            default: medium
+      responses:
+        '200':
+          description: Page image information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageImage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '416':
+          description: Page number out of range
+
+  /books/{bookId}/pages/generate:
+    post:
+      tags:
+        - Books
+      summary: Trigger page image generation
+      description: Start background job to generate page images for a book
+      operationId: generateBookPages
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: Regenerate even if pages already exist
+                resolutions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [thumbnail, medium, high-res, ultra, all]
+                  default: [all]
+                  description: Resolutions to generate
+                pageRange:
+                  type: object
+                  description: Optional page range to generate
+                  properties:
+                    start:
+                      type: integer
+                      minimum: 1
+                    end:
+                      type: integer
+                      minimum: 1
+      responses:
+        '202':
+          description: Generation job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageGenerationJob'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Generation already in progress
+
+  /books/{bookId}/pages/status:
+    get:
+      tags:
+        - Books
+      summary: Get page generation status
+      description: Get current status and progress of page generation
+      operationId: getPageGenerationStatus
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Generation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageGenerationStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============= BOOK COVER =============
+  /books/{bookId}/cover:
+    get:
+      tags:
+        - Books
+      summary: Get book cover URL
+      description: Get signed URL for the book cover image
+      operationId: getBookCover
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: size
+          in: query
+          description: Desired cover size
+          schema:
+            type: string
+            enum: [small, medium, large]
+            default: medium
+      responses:
+        '200':
+          description: Cover information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookCover'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Books
+      summary: Upload custom cover
+      description: Upload a custom cover image for the book
+      operationId: uploadBookCover
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Cover image (JPEG, PNG, or WebP, max 5MB)
+      responses:
+        '200':
+          description: Cover uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookCover'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: File too large (max 5MB)
+
+    delete:
+      tags:
+        - Books
+      summary: Remove custom cover
+      description: Remove custom cover and revert to auto-generated cover from first page
+      operationId: deleteBookCover
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Custom cover removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  coverUrl:
+                    type: string
+                    format: uri
+                    description: New auto-generated cover URL
+                  isCustom:
+                    type: boolean
+                    example: false
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /books/{bookId}/ratings:
+    get:
+      tags:
+        - Books
+      summary: Get book ratings
+      operationId: getBookRatings
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Book ratings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Rating'
+                  summary:
+                    $ref: '#/components/schemas/RatingSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Books
+      summary: Rate a book
+      operationId: rateBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                review:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: Rating created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rating'
+
+  /books/{bookId}/favorite:
+    post:
+      tags:
+        - Books
+      summary: Add book to favorites
+      operationId: favoriteBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '201':
+          description: Added to favorites
+
+    delete:
+      tags:
+        - Books
+      summary: Remove from favorites
+      operationId: unfavoriteBook
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '204':
+          description: Removed from favorites
+
+  # ============= BOOK AI FEATURES (Premium) =============
+  /books/{bookId}/summary:
+    post:
+      tags:
+        - Books
+        - AI
+      summary: Generate book summary
+      description: |
+        Generate an AI-powered summary of a book or specific chapter.
+        Uses map-reduce approach for full books (summarize chapters, then combine).
+        **Premium feature** - requires premium subscription.
+      operationId: generateBookSummary
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [full, chapter]
+                  default: full
+                  description: Generate summary for full book or specific chapter
+                chapterNumber:
+                  type: integer
+                  minimum: 1
+                  description: Required when type is 'chapter'
+                length:
+                  type: string
+                  enum: [brief, detailed]
+                  default: brief
+                  description: Brief (~500 words) or detailed (~2000 words)
+                modelId:
+                  type: string
+                  enum: [gpt-4o, gpt-4o-mini, claude-3-sonnet]
+                  default: gpt-4o-mini
+            example:
+              type: "chapter"
+              chapterNumber: 3
+              length: "detailed"
+      responses:
+        '200':
+          description: Summary generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookSummary'
+        '402':
+          description: Premium subscription required or insufficient credits
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Chapter number required for chapter summary
+
+    get:
+      tags:
+        - Books
+        - AI
+      summary: List book summaries
+      description: Get previously generated summaries for a book
+      operationId: listBookSummaries
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [full, chapter]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /books/{bookId}/flashcards:
+    post:
+      tags:
+        - Books
+        - AI
+      summary: Generate flashcards
+      description: |
+        Generate AI-powered flashcards from book content for study/memorization.
+        **Premium feature** - requires premium subscription.
+      operationId: generateFlashcards
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chapterNumber:
+                  type: integer
+                  minimum: 1
+                  description: Generate from specific chapter (optional, defaults to full book)
+                count:
+                  type: integer
+                  minimum: 5
+                  maximum: 50
+                  default: 20
+                  description: Number of flashcards to generate
+                difficulty:
+                  type: string
+                  enum: [easy, medium, hard]
+                  default: medium
+                focus:
+                  type: string
+                  enum: [key_concepts, vocabulary, facts, all]
+                  default: all
+                  description: What type of content to focus on
+            example:
+              chapterNumber: 5
+              count: 20
+              difficulty: "medium"
+              focus: "key_concepts"
+      responses:
+        '201':
+          description: Flashcards generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlashcardSet'
+        '402':
+          description: Premium subscription required or insufficient credits
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags:
+        - Books
+        - AI
+      summary: List flashcard sets
+      description: Get previously generated flashcard sets for a book
+      operationId: listFlashcardSets
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of flashcard sets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlashcardSet'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /books/{bookId}/flashcards/{flashcardSetId}:
+    get:
+      tags:
+        - Books
+        - AI
+      summary: Get flashcard set
+      description: Get a specific flashcard set with all cards
+      operationId: getFlashcardSet
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: flashcardSetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Flashcard set details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlashcardSet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Books
+        - AI
+      summary: Delete flashcard set
+      operationId: deleteFlashcardSet
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: flashcardSetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Flashcard set deleted
+
+  /books/{bookId}/quiz:
+    post:
+      tags:
+        - Books
+        - AI
+      summary: Generate quiz
+      description: |
+        Generate an AI-powered comprehension quiz from book content.
+        **Premium feature** - requires premium subscription.
+      operationId: generateQuiz
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chapterNumber:
+                  type: integer
+                  minimum: 1
+                  description: Generate from specific chapter (optional)
+                questionCount:
+                  type: integer
+                  minimum: 5
+                  maximum: 30
+                  default: 10
+                questionTypes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [multiple_choice, true_false, short_answer]
+                  default: [multiple_choice]
+                difficulty:
+                  type: string
+                  enum: [easy, medium, hard]
+                  default: medium
+            example:
+              chapterNumber: 2
+              questionCount: 10
+              questionTypes: ["multiple_choice", "true_false"]
+              difficulty: "medium"
+      responses:
+        '201':
+          description: Quiz generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quiz'
+        '402':
+          description: Premium subscription required or insufficient credits
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags:
+        - Books
+        - AI
+      summary: List quizzes
+      description: Get previously generated quizzes for a book
+      operationId: listQuizzes
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of quizzes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Quiz'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /books/{bookId}/quiz/{quizId}:
+    get:
+      tags:
+        - Books
+        - AI
+      summary: Get quiz
+      description: Get a specific quiz with all questions
+      operationId: getQuiz
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Quiz details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quiz'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Books
+        - AI
+      summary: Delete quiz
+      operationId: deleteQuiz
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Quiz deleted
+
+  /books/{bookId}/quiz/{quizId}/submit:
+    post:
+      tags:
+        - Books
+        - AI
+      summary: Submit quiz answers
+      description: Submit answers and get results with explanations
+      operationId: submitQuizAnswers
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - answers
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - questionId
+                      - answer
+                    properties:
+                      questionId:
+                        type: string
+                      answer:
+                        type: string
+                        description: Selected option index for MC, "true"/"false" for T/F, text for short answer
+      responses:
+        '200':
+          description: Quiz results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============= USERS =============
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user profile
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+    patch:
+      tags:
+        - Users
+      summary: Update current user profile
+      operationId: updateCurrentUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                  maxLength: 100
+                username:
+                  type: string
+                  pattern: '^[a-z0-9_-]{3,30}$'
+                bio:
+                  type: string
+                  maxLength: 500
+                preferences:
+                  $ref: '#/components/schemas/UserPreferences'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /users/me/avatar:
+    put:
+      tags:
+        - Users
+      summary: Upload avatar
+      operationId: uploadAvatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Avatar uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avatarUrl:
+                    type: string
+                    format: uri
+
+  /users/{userId}:
+    get:
+      tags:
+        - Users
+      summary: Get user public profile
+      operationId: getUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicUserProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{userId}/books:
+    get:
+      tags:
+        - Users
+      summary: Get user's public books
+      operationId: getUserBooks
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: User's books
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ============= SEARCH =============
+  /search:
+    get:
+      tags:
+        - Search
+      summary: Global search
+      operationId: globalSearch
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: types
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [books, users, clubs]
+            default: [books, users, clubs]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+
+  /search/books:
+    get:
+      tags:
+        - Search
+      summary: Search books
+      operationId: searchBooks
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/BookCategory'
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: author
+          in: query
+          schema:
+            type: string
+        - name: minRating
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            maximum: 5
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [relevance, title, date, rating, views]
+            default: relevance
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Book search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookSearchResult'
+                  facets:
+                    $ref: '#/components/schemas/SearchFacets'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /search/semantic:
+    post:
+      tags:
+        - Search
+      summary: Semantic search
+      operationId: semanticSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Natural language query
+                limit:
+                  type: integer
+                  default: 10
+                  maximum: 50
+      responses:
+        '200':
+          description: Semantic search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookSearchResult'
+
+  /search/autocomplete:
+    get:
+      tags:
+        - Search
+      summary: Autocomplete suggestions
+      operationId: autocomplete
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: types
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [books, authors, categories]
+            default: [books, authors]
+      responses:
+        '200':
+          description: Autocomplete suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                        value:
+                          type: string
+                        count:
+                          type: integer
+
+  # ============= AI =============
+  /ai/sessions:
+    get:
+      tags:
+        - AI
+      summary: List AI chat sessions
+      operationId: listAiSessions
+      parameters:
+        - name: bookId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of AI sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AiSession'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - AI
+      summary: Create AI chat session
+      description: |
+        Create a new AI chat session for one or more books.
+
+        **Single Book Chat**: Provide `bookId` for standard book chat.
+
+        **Multi-Book Chat** (Premium): Provide `bookIds` array to chat across multiple books.
+        The AI will search across all specified books and include citations from any relevant book.
+      operationId: createAiSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bookId:
+                  type: string
+                  description: Single book ID for standard chat
+                bookIds:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 10
+                  description: Multiple book IDs for multi-book chat (Premium feature)
+                modelId:
+                  type: string
+                  enum: [gpt-4o, gpt-4o-mini, claude-3-opus, claude-3-sonnet, gemini-pro]
+                  default: gpt-4o-mini
+            example:
+              bookIds: ["ffe66482-4ee7-4de8-8c94-38d5414c1d17", "abc12345-1234-5678-9abc-def012345678"]
+              modelId: "gpt-4o-mini"
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSession'
+        '402':
+          description: Multi-book chat requires premium subscription
+
+  /ai/sessions/{sessionId}:
+    get:
+      tags:
+        - AI
+      summary: Get AI session with messages
+      operationId: getAiSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: AI session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSessionDetail'
+
+    delete:
+      tags:
+        - AI
+      summary: Delete AI session
+      operationId: deleteAiSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Session deleted
+
+  /ai/sessions/{sessionId}/messages:
+    post:
+      tags:
+        - AI
+      summary: Send message to AI
+      operationId: sendAiMessage
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  maxLength: 10000
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiMessage'
+        '402':
+          description: Insufficient credits
+
+  /ai/sessions/{sessionId}/export:
+    get:
+      tags:
+        - AI
+      summary: Export chat session
+      description: |
+        Export an AI chat session to PDF, Markdown, or JSON format.
+        **Premium feature** - requires premium subscription.
+      operationId: exportAiSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [pdf, markdown, json]
+            default: pdf
+        - name: includeMetadata
+          in: query
+          description: Include session metadata (model, token counts, costs)
+          schema:
+            type: boolean
+            default: true
+        - name: includeCitations
+          in: query
+          description: Include page citations and excerpts
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Export URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResult'
+        '402':
+          description: Premium subscription required
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /ai/models:
+    get:
+      tags:
+        - AI
+      summary: List available AI models
+      operationId: listAiModels
+      responses:
+        '200':
+          description: Available models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AiModel'
+
+  /ai/billing/balance:
+    get:
+      tags:
+        - AI
+      summary: Get AI credit balance
+      operationId: getAiBillingBalance
+      responses:
+        '200':
+          description: Credit balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: number
+                    format: float
+                  currency:
+                    type: string
+                    default: USD
+
+  /ai/billing/usage:
+    get:
+      tags:
+        - AI
+      summary: Get AI usage history
+      operationId: getAiBillingUsage
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Usage history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AiUsageRecord'
+                  summary:
+                    type: object
+                    properties:
+                      totalTokens:
+                        type: integer
+                      totalCost:
+                        type: number
+                      byModel:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            tokens:
+                              type: integer
+                            cost:
+                              type: number
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ============= CLUBS =============
+  /clubs:
+    get:
+      tags:
+        - Clubs
+      summary: Discover book clubs
+      operationId: listClubs
+      parameters:
+        - name: visibility
+          in: query
+          schema:
+            type: string
+            enum: [public]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of clubs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Club'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Clubs
+      summary: Create book club
+      operationId: createClub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                description:
+                  type: string
+                  maxLength: 1000
+                visibility:
+                  type: string
+                  enum: [public, private]
+                  default: public
+                joinPolicy:
+                  type: string
+                  enum: [open, approval, invite_only]
+                  default: open
+      responses:
+        '201':
+          description: Club created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+
+  /clubs/{clubId}:
+    get:
+      tags:
+        - Clubs
+      summary: Get club details
+      operationId: getClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Club details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClubDetail'
+
+    patch:
+      tags:
+        - Clubs
+      summary: Update club
+      operationId: updateClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                visibility:
+                  type: string
+                  enum: [public, private]
+                joinPolicy:
+                  type: string
+                  enum: [open, approval, invite_only]
+      responses:
+        '200':
+          description: Club updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+
+    delete:
+      tags:
+        - Clubs
+      summary: Delete club
+      operationId: deleteClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Club deleted
+
+  /clubs/{clubId}/members:
+    get:
+      tags:
+        - Clubs
+      summary: List club members
+      operationId: listClubMembers
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Club members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClubMember'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Clubs
+      summary: Join club
+      operationId: joinClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Joined club
+        '202':
+          description: Join request submitted (pending approval)
+
+  /clubs/{clubId}/members/{userId}:
+    patch:
+      tags:
+        - Clubs
+      summary: Update member role
+      operationId: updateClubMember
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [admin, moderator, member]
+      responses:
+        '200':
+          description: Member role updated
+
+    delete:
+      tags:
+        - Clubs
+      summary: Remove member
+      operationId: removeClubMember
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Member removed
+
+  /clubs/{clubId}/invites:
+    post:
+      tags:
+        - Clubs
+      summary: Invite to club
+      operationId: inviteToClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [admin, moderator, member]
+                  default: member
+                message:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Invite sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClubInvite'
+
+  /clubs/{clubId}/books:
+    get:
+      tags:
+        - Clubs
+      summary: List club books
+      operationId: listClubBooks
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Club books
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Clubs
+      summary: Add book to club
+      operationId: addBookToClub
+      parameters:
+        - name: clubId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bookId
+              properties:
+                bookId:
+                  type: string
+      responses:
+        '201':
+          description: Book added
+
+  # ============= PROGRESS =============
+  /progress/{bookId}:
+    get:
+      tags:
+        - Progress
+      summary: Get reading progress
+      operationId: getProgress
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Reading progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingProgress'
+        '404':
+          description: No progress found
+
+    put:
+      tags:
+        - Progress
+      summary: Update reading progress
+      operationId: updateProgress
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPage:
+                  type: integer
+                  minimum: 1
+                totalPages:
+                  type: integer
+                  minimum: 1
+                scale:
+                  type: number
+                  minimum: 0.1
+                  maximum: 10
+                scrollPosition:
+                  type: object
+                  properties:
+                    x:
+                      type: number
+                    y:
+                      type: number
+      responses:
+        '200':
+          description: Progress updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingProgress'
+
+  /progress/history:
+    get:
+      tags:
+        - Progress
+      summary: Get reading history
+      operationId: getProgressHistory
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Reading history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReadingProgressWithBook'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ============= ADMIN =============
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: List all users
+      operationId: adminListUsers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, deleted]
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}:
+    patch:
+      tags:
+        - Admin
+      summary: Update user
+      operationId: adminUpdateUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [active, suspended]
+                roles:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: User updated
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/audit-logs:
+    get:
+      tags:
+        - Admin
+      summary: Get audit logs
+      operationId: getAuditLogs
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: System healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded]
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    BookIdParam:
+      name: bookId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            documentation:
+              type: string
+              format: uri
+      example:
+        error:
+          code: "BOOK_NOT_FOUND"
+          message: "The requested book does not exist or you don't have access"
+          requestId: "req_abc123xyz789"
+          timestamp: "2025-07-15T10:30:00Z"
+          documentation: "https://api.ilm-red.com/docs/errors#BOOK_NOT_FOUND"
+
+    ValidationError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasMore:
+          type: boolean
+      example:
+        page: 1
+        limit: 20
+        total: 100
+        totalPages: 5
+        hasMore: true
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Seconds until access token expires
+        tokenType:
+          type: string
+          default: Bearer
+      example:
+        accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MWUzZGI1Mi1mYWMxLTRjMDAtOGZiZi03NTI4N2VkODA4NGEiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJpYXQiOjE3MjA1MzQ4MDB9.mock_signature"
+        refreshToken: "rt_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+        expiresIn: 900
+        tokenType: "Bearer"
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        keyPrefix:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiKeyWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          properties:
+            key:
+              type: string
+              description: Full API key (only shown once)
+
+    BookCategory:
+      type: string
+      enum:
+        - religion
+        - islamic_studies
+        - quran_studies
+        - hadith
+        - fiqh
+        - history
+        - biography
+        - philosophy
+        - science
+        - technology
+        - education
+        - self_help
+        - fiction
+        - children
+        - languages
+        - other
+
+    Book:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: '#/components/schemas/BookCategory'
+        language:
+          type: string
+        visibility:
+          type: string
+          enum: [public, private, friends, club]
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+        stats:
+          type: object
+          properties:
+            viewCount:
+              type: integer
+            favoriteCount:
+              type: integer
+            rating:
+              type: number
+              nullable: true
+        status:
+          type: string
+          enum: [processing, active, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        title: "Charlie and the Chocolate Factory"
+        author: "Roald Dahl"
+        description: "Charlie and the Chocolate Factory is a classic children's novel by Roald Dahl, first published in 1964."
+        category: "children"
+        language: "en"
+        visibility: "public"
+        thumbnailUrl: "https://cdn.ilm-red.com/thumbnails/charlie-chocolate.png"
+        stats:
+          viewCount: 2
+          favoriteCount: 5
+          rating: 4.5
+        status: "active"
+        createdAt: "2025-07-10T18:00:29.753Z"
+        updatedAt: "2025-07-13T20:22:42.779Z"
+
+    BookDetail:
+      allOf:
+        - $ref: '#/components/schemas/Book'
+        - type: object
+          properties:
+            owner:
+              $ref: '#/components/schemas/PublicUserProfile'
+            file:
+              type: object
+              properties:
+                size:
+                  type: integer
+                mimeType:
+                  type: string
+                pageCount:
+                  type: integer
+                  nullable: true
+            aiEnabled:
+              type: boolean
+            isFavorite:
+              type: boolean
+            userRating:
+              type: integer
+              nullable: true
+
+    BookSearchResult:
+      allOf:
+        - $ref: '#/components/schemas/Book'
+        - type: object
+          properties:
+            score:
+              type: number
+            highlights:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+
+    Rating:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/PublicUserProfile'
+      example:
+        id: "689f806b-c0ae-477a-a862-9454fbf9db1b"
+        userId: "c12776e4-8ce3-4776-8330-1cafc24339c2"
+        rating: 5
+        review: "An exceptional blend of elegance and substance — this book captivates with its flawless design, rich content, and timeless quality."
+        createdAt: "2025-07-23T17:03:49.779Z"
+        user:
+          id: "c12776e4-8ce3-4776-8330-1cafc24339c2"
+          username: "reader_c12776e4"
+          displayName: "Alex Smith"
+          avatarUrl: null
+          bio: "Book enthusiast and avid reader"
+
+    RatingSummary:
+      type: object
+      properties:
+        average:
+          type: number
+        count:
+          type: integer
+        distribution:
+          type: object
+          properties:
+            '1':
+              type: integer
+            '2':
+              type: integer
+            '3':
+              type: integer
+            '4':
+              type: integer
+            '5':
+              type: integer
+      example:
+        average: 4.2
+        count: 22
+        distribution:
+          '1': 1
+          '2': 2
+          '3': 3
+          '4': 6
+          '5': 10
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+        stats:
+          type: object
+          properties:
+            booksUploaded:
+              type: integer
+            booksRead:
+              type: integer
+            clubsJoined:
+              type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicUserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+      example:
+        id: "61e3db52-fac1-4c00-8fbf-75287ed8084a"
+        username: "reader_61e3db52"
+        displayName: "Alex Smith"
+        avatarUrl: null
+        bio: "Book enthusiast and avid reader"
+
+    UserPreferences:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+        timezone:
+          type: string
+        notifications:
+          type: object
+          properties:
+            email:
+              type: boolean
+            push:
+              type: boolean
+
+    SearchResults:
+      type: object
+      properties:
+        books:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookSearchResult'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicUserProfile'
+        clubs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Club'
+        query:
+          type: string
+        took:
+          type: integer
+          description: Search time in milliseconds
+
+    SearchFacets:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              count:
+                type: integer
+        languages:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              count:
+                type: integer
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              count:
+                type: integer
+
+    AiSession:
+      type: object
+      properties:
+        id:
+          type: string
+        bookId:
+          type: string
+          description: Primary book ID (for single-book sessions)
+          nullable: true
+        bookIds:
+          type: array
+          items:
+            type: string
+          description: Book IDs for multi-book sessions
+        isMultiBook:
+          type: boolean
+          description: True if session spans multiple books
+        modelId:
+          type: string
+        status:
+          type: string
+          enum: [active, completed, archived]
+        messageCount:
+          type: integer
+        totalTokens:
+          type: integer
+        totalCost:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiSessionDetail:
+      allOf:
+        - $ref: '#/components/schemas/AiSession'
+        - type: object
+          properties:
+            book:
+              $ref: '#/components/schemas/Book'
+              description: Primary book (for single-book sessions)
+            books:
+              type: array
+              items:
+                $ref: '#/components/schemas/Book'
+              description: All books in multi-book sessions
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/AiMessage'
+
+    AiMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        citations:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId:
+                type: string
+                description: Book ID (for multi-book sessions)
+              bookTitle:
+                type: string
+                description: Book title (for multi-book sessions)
+              page:
+                type: integer
+              chapter:
+                type: string
+              excerpt:
+                type: string
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            costUsd:
+              type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    AiModel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+        description:
+          type: string
+        maxTokens:
+          type: integer
+        inputCostPer1M:
+          type: number
+        outputCostPer1M:
+          type: number
+
+    AiUsageRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          type: string
+        modelId:
+          type: string
+        promptTokens:
+          type: integer
+        completionTokens:
+          type: integer
+        costUsd:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    Club:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        coverImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        visibility:
+          type: string
+          enum: [public, private]
+        joinPolicy:
+          type: string
+          enum: [open, approval, invite_only]
+        memberCount:
+          type: integer
+        bookCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    ClubDetail:
+      allOf:
+        - $ref: '#/components/schemas/Club'
+        - type: object
+          properties:
+            owner:
+              $ref: '#/components/schemas/PublicUserProfile'
+            isMember:
+              type: boolean
+            memberRole:
+              type: string
+              nullable: true
+
+    ClubMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, moderator, member]
+        joinedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/PublicUserProfile'
+
+    ClubInvite:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, expired]
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ReadingProgress:
+      type: object
+      properties:
+        bookId:
+          type: string
+        currentPage:
+          type: integer
+        totalPages:
+          type: integer
+        percentage:
+          type: number
+        scale:
+          type: number
+        scrollPosition:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+          nullable: true
+        readingTimeMinutes:
+          type: integer
+        completed:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReadingProgressWithBook:
+      allOf:
+        - $ref: '#/components/schemas/ReadingProgress'
+        - type: object
+          properties:
+            book:
+              $ref: '#/components/schemas/Book'
+
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/UserProfile'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum: [active, suspended, deleted]
+            lastLoginAt:
+              type: string
+              format: date-time
+              nullable: true
+            loginCount:
+              type: integer
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        userId:
+          type: string
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        changes:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              old:
+                {}
+              new:
+                {}
+        metadata:
+          type: object
+          properties:
+            ipAddress:
+              type: string
+            userAgent:
+              type: string
+            requestId:
+              type: string
+
+    # ============= PAGE IMAGE SCHEMAS =============
+    PageImage:
+      type: object
+      properties:
+        pageNumber:
+          type: integer
+          description: Page number (1-indexed)
+        dimensions:
+          type: object
+          properties:
+            width:
+              type: integer
+              description: Original PDF page width
+            height:
+              type: integer
+              description: Original PDF page height
+        url:
+          type: string
+          format: uri
+          description: Signed URL for requested resolution
+        urls:
+          type: object
+          description: Signed URLs for all resolutions
+          properties:
+            thumbnail:
+              type: string
+              format: uri
+              description: 150px width
+            medium:
+              type: string
+              format: uri
+              description: 800px width
+            highRes:
+              type: string
+              format: uri
+              description: 1600px width
+            ultra:
+              type: string
+              format: uri
+              description: 3200px width
+        fileSizes:
+          type: object
+          properties:
+            thumbnail:
+              type: integer
+              description: File size in bytes
+            medium:
+              type: integer
+            highRes:
+              type: integer
+            ultra:
+              type: integer
+        expiresAt:
+          type: string
+          format: date-time
+          description: URL expiration time
+
+    PageManifest:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PageImage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        metadata:
+          type: object
+          properties:
+            bookId:
+              type: string
+            totalPages:
+              type: integer
+            generationStatus:
+              type: string
+              enum: [not_started, queued, processing, completed, failed]
+            resolutions:
+              type: array
+              items:
+                type: string
+                enum: [thumbnail, medium, high-res, ultra]
+
+    PageGenerationJob:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Job ID
+        bookId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed, cancelled]
+        totalPages:
+          type: integer
+        completedPages:
+          type: integer
+        failedPages:
+          type: integer
+        message:
+          type: string
+        queuedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    PageGenerationStatus:
+      type: object
+      properties:
+        bookId:
+          type: string
+        status:
+          type: string
+          enum: [not_started, queued, processing, completed, failed]
+        progress:
+          type: object
+          properties:
+            totalPages:
+              type: integer
+            completedPages:
+              type: integer
+            failedPages:
+              type: integer
+            percentage:
+              type: number
+        currentJob:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            startedAt:
+              type: string
+              format: date-time
+            estimatedCompletion:
+              type: string
+              format: date-time
+              nullable: true
+        failedPageNumbers:
+          type: array
+          items:
+            type: integer
+          description: List of page numbers that failed to generate
+
+    BookCover:
+      type: object
+      properties:
+        bookId:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Signed URL for cover image
+        isCustom:
+          type: boolean
+          description: True if cover was uploaded by user, false if auto-generated
+        dimensions:
+          type: object
+          properties:
+            width:
+              type: integer
+            height:
+              type: integer
+        fileSize:
+          type: integer
+          description: File size in bytes
+        mimeType:
+          type: string
+          description: Image MIME type (image/jpeg, image/png, image/webp)
+        uploadedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When custom cover was uploaded
+        generatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When auto cover was generated
+        expiresAt:
+          type: string
+          format: date-time
+          description: URL expiration time
+
+    # ============= PREMIUM AI FEATURE SCHEMAS =============
+    BookSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        bookId:
+          type: string
+        type:
+          type: string
+          enum: [full, chapter]
+        chapterNumber:
+          type: integer
+          nullable: true
+          description: Chapter number (if chapter summary)
+        length:
+          type: string
+          enum: [brief, detailed]
+        summary:
+          type: string
+          description: The generated summary text
+        keyPoints:
+          type: array
+          items:
+            type: string
+          description: Key points extracted from the content
+        wordCount:
+          type: integer
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            costUsd:
+              type: number
+        modelId:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+      example:
+        id: "sum_abc123"
+        bookId: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        type: "chapter"
+        chapterNumber: 3
+        length: "detailed"
+        summary: "Chapter 3 explores the fascinating world of the Chocolate Room, where everything is edible..."
+        keyPoints:
+          - "The Chocolate Room contains a chocolate river"
+          - "Oompa-Loompas work in the factory"
+          - "Augustus Gloop falls into the river"
+        wordCount: 1850
+        usage:
+          promptTokens: 5200
+          completionTokens: 450
+          totalTokens: 5650
+          costUsd: 0.003
+        modelId: "gpt-4o-mini"
+        generatedAt: "2025-07-15T14:30:00Z"
+
+    FlashcardSet:
+      type: object
+      properties:
+        id:
+          type: string
+        bookId:
+          type: string
+        chapterNumber:
+          type: integer
+          nullable: true
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        focus:
+          type: string
+          enum: [key_concepts, vocabulary, facts, all]
+        flashcards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flashcard'
+        cardCount:
+          type: integer
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            costUsd:
+              type: number
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: "fc_xyz789"
+        bookId: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        chapterNumber: 5
+        difficulty: "medium"
+        focus: "key_concepts"
+        flashcards:
+          - id: "card_001"
+            front: "What is the name of the chocolate river in Willy Wonka's factory?"
+            back: "The chocolate river is simply called 'the chocolate river' - it's the source of all the chocolate in the factory"
+            pageRef: 45
+            difficulty: "easy"
+          - id: "card_002"
+            front: "Who are the Oompa-Loompas?"
+            back: "Small workers from Loompaland who work in Willy Wonka's chocolate factory in exchange for cacao beans"
+            pageRef: 52
+            difficulty: "medium"
+        cardCount: 20
+        usage:
+          promptTokens: 8500
+          completionTokens: 1800
+          totalTokens: 10300
+          costUsd: 0.005
+        createdAt: "2025-07-15T14:45:00Z"
+
+    Flashcard:
+      type: object
+      properties:
+        id:
+          type: string
+        front:
+          type: string
+          description: Question or prompt
+        back:
+          type: string
+          description: Answer or explanation
+        pageRef:
+          type: integer
+          description: Page number reference in the book
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        tags:
+          type: array
+          items:
+            type: string
+          description: Optional tags for categorization
+
+    Quiz:
+      type: object
+      properties:
+        id:
+          type: string
+        bookId:
+          type: string
+        chapterNumber:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestion'
+        questionCount:
+          type: integer
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            costUsd:
+              type: number
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: "quiz_abc123"
+        bookId: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        chapterNumber: 2
+        title: "Chapter 2 Comprehension Quiz"
+        difficulty: "medium"
+        questions:
+          - id: "q_001"
+            type: "multiple_choice"
+            question: "What did Charlie find on the ground?"
+            options:
+              - "A chocolate bar"
+              - "A fifty-pence piece"
+              - "A golden ticket"
+              - "A wrapper"
+            correctAnswer: 1
+            explanation: "Charlie found a fifty-pence piece in the gutter, which he used to buy his winning chocolate bar."
+            pageRef: 28
+          - id: "q_002"
+            type: "true_false"
+            question: "Charlie lived with only his parents."
+            correctAnswer: false
+            explanation: "Charlie lived with his parents AND his four grandparents - Grandpa Joe, Grandma Josephine, Grandpa George, and Grandma Georgina."
+            pageRef: 5
+        questionCount: 10
+        usage:
+          promptTokens: 6200
+          completionTokens: 2800
+          totalTokens: 9000
+          costUsd: 0.005
+        createdAt: "2025-07-15T15:00:00Z"
+
+    QuizQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [multiple_choice, true_false, short_answer]
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Options for multiple choice questions
+        correctAnswer:
+          oneOf:
+            - type: integer
+              description: Index of correct option for multiple_choice
+            - type: boolean
+              description: True/false for true_false questions
+            - type: string
+              description: Expected answer for short_answer
+        explanation:
+          type: string
+          description: Explanation of the correct answer
+        pageRef:
+          type: integer
+          description: Page number reference
+
+    QuizResult:
+      type: object
+      properties:
+        quizId:
+          type: string
+        score:
+          type: integer
+          description: Number of correct answers
+        totalQuestions:
+          type: integer
+        percentage:
+          type: number
+        passed:
+          type: boolean
+          description: True if score >= 70%
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+              userAnswer:
+                type: string
+              correctAnswer:
+                type: string
+              isCorrect:
+                type: boolean
+              explanation:
+                type: string
+        completedAt:
+          type: string
+          format: date-time
+      example:
+        quizId: "quiz_abc123"
+        score: 8
+        totalQuestions: 10
+        percentage: 80
+        passed: true
+        results:
+          - questionId: "q_001"
+            userAnswer: "1"
+            correctAnswer: "1"
+            isCorrect: true
+            explanation: "Charlie found a fifty-pence piece in the gutter."
+          - questionId: "q_002"
+            userAnswer: "true"
+            correctAnswer: "false"
+            isCorrect: false
+            explanation: "Charlie lived with his parents AND his four grandparents."
+        completedAt: "2025-07-15T15:10:00Z"
+
+    ExportResult:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        format:
+          type: string
+          enum: [pdf, markdown, json]
+        downloadUrl:
+          type: string
+          format: uri
+          description: Signed URL to download the export
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          description: File size in bytes
+        expiresAt:
+          type: string
+          format: date-time
+          description: URL expiration time (24 hours)
+      example:
+        sessionId: "sess_xyz789"
+        format: "pdf"
+        downloadUrl: "https://cdn.ilm-red.com/exports/sess_xyz789.pdf?sig=abc123"
+        fileName: "chat-session-2025-07-15.pdf"
+        fileSize: 125000
+        expiresAt: "2025-07-16T15:00:00Z"

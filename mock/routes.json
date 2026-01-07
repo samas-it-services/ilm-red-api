@@ -1,0 +1,9 @@
+{
+  "/v1/books": "/books",
+  "/v1/books/:id": "/books/:id",
+  "/v1/books/:bookId/ratings": "/ratings?bookId=:bookId",
+  "/v1/users": "/users",
+  "/v1/users/:id": "/users/:id",
+  "/v1/search/books": "/books",
+  "/v1/health": "/health"
+}

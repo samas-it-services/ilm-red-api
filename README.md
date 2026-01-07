@@ -53,17 +53,17 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 
 | Component | Technology |
 |-----------|------------|
-| Runtime | Node.js 20 LTS |
-| Framework | Fastify |
-| Language | TypeScript 5.x |
-| Database | Azure Cosmos DB |
-| Cache | Azure Redis |
-| Search | Azure AI Search |
-| Storage | Azure Blob + CDN |
-| Events | Azure Event Hubs |
-| Analytics | Microsoft Fabric |
-| AI | Azure OpenAI |
-| Gateway | Azure API Management |
+| Runtime | Python 3.12+ |
+| Framework | FastAPI |
+| ORM | SQLAlchemy 2.0 (async) |
+| Validation | Pydantic 2.x |
+| Database | PostgreSQL + pgvector |
+| Cache | Redis |
+| Search | pgvector (semantic) + pg_trgm (full-text) |
+| Storage | Local / Azure Blob |
+| AI | Multi-vendor (OpenAI, Qwen, Claude, Gemini, Grok, DeepSeek) |
+| Background | ARQ (Redis-based) |
+| Auth | JWT + API Keys (Argon2) |
 
 ## Documentation
 
@@ -114,83 +114,139 @@ curl -H "X-API-Key: ilm_live_abc123..." https://api.ilm-red.com/v1/books
 
 ## Quick Start
 
+### Prerequisites
+
+- **Docker** & Docker Compose
+- **Python 3.12+**
+- **Poetry** - Install with: `curl -sSL https://install.python-poetry.org | python3 -`
+
+### Option 1: Using Dev Script (Recommended)
+
 ```bash
 # Clone repository
 git clone https://github.com/ilm-red/ilm-red-api.git
 cd ilm-red-api
 
-# Install dependencies
-npm install
+# Copy environment file and add your API keys
+cp .env.example .env
 
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your credentials
+# Run the dev script (handles everything)
+./scripts/dev.sh
+```
 
-# Start development server
-npm run dev
+The dev script will:
+1. Check prerequisites (Docker, Poetry)
+2. Install Python dependencies
+3. Start PostgreSQL + Redis containers
+4. Run database migrations
+5. Start the API server with hot-reload
 
-# Run tests
-npm test
+### Option 2: Manual Setup
 
-# Build for production
-npm run build
+```bash
+# Install Python dependencies
+poetry install
+
+# Start database and Redis
+docker compose -f docker/docker-compose.yml up -d db redis
+
+# Wait for DB to be ready, then run migrations
+poetry run alembic upgrade head
+
+# Start the API server with hot-reload
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Verify Installation
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Open API docs in browser
+open http://localhost:8000/docs
+```
+
+### Other Commands
+
+```bash
+./scripts/dev.sh setup    # Setup only (no API start)
+./scripts/dev.sh start    # Start API only
+./scripts/dev.sh stop     # Stop Docker services
+./scripts/dev.sh test     # Run tests
+./scripts/dev.sh reset    # Reset database (destructive!)
+./scripts/dev.sh logs     # Show Docker logs
 ```
 
 ## Project Structure
 
 ```
 ilm-red-api/
-├── docs/
-│   ├── ARCHITECTURE.md    # System architecture
-│   ├── PRD.md             # Product requirements
-│   └── TDD.md             # Technical design
-├── openapi/
-│   └── api-v1.yaml        # OpenAPI 3.1 specification
-├── src/
+├── app/
+│   ├── main.py            # FastAPI entry point
+│   ├── config.py          # Pydantic settings
+│   ├── api/v1/            # API route handlers
+│   │   ├── auth.py, books.py, users.py, search.py, ai.py
+│   ├── models/            # SQLAlchemy models
+│   ├── schemas/           # Pydantic request/response schemas
 │   ├── services/          # Business logic
-│   ├── routes/            # API endpoints
-│   ├── models/            # Data models
-│   ├── middleware/        # Auth, validation, etc.
-│   └── utils/             # Helpers
+│   ├── repositories/      # Data access layer
+│   ├── db/                # Database setup + Alembic migrations
+│   ├── ai/                # AI provider abstraction
+│   │   └── providers/     # OpenAI, Qwen, Claude, etc.
+│   └── storage/           # File storage abstraction
+├── docker/
+│   ├── Dockerfile.dev
+│   └── docker-compose.yml
+├── scripts/
+│   └── dev.sh             # Local development script
 ├── tests/
 │   ├── unit/
-│   ├── integration/
-│   └── e2e/
-└── package.json
+│   └── integration/
+├── docs/
+│   ├── PRD.md, TDD.md, ARCHITECTURE.md, PRICING.md
+├── openapi/
+│   └── api-v1.yaml        # OpenAPI 3.1 specification
+├── pyproject.toml         # Poetry dependencies
+└── alembic.ini            # Database migrations config
 ```
 
 ## Environment Variables
 
 ```bash
-# Server
-NODE_ENV=development
-PORT=3000
+# Application
+ENVIRONMENT=development
+DEBUG=true
 
-# Azure Cosmos DB
-COSMOS_ENDPOINT=https://xxx.documents.azure.com
-COSMOS_KEY=xxx
-COSMOS_DATABASE=ilm-red
+# Database (PostgreSQL)
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/ilmred
 
-# Azure Redis
-REDIS_URL=redis://xxx.redis.cache.windows.net:6380
+# Redis
+REDIS_URL=redis://localhost:6379
 
-# Azure Blob Storage
-BLOB_CONNECTION_STRING=xxx
-BLOB_CONTAINER=books
+# Authentication
+JWT_SECRET=your-secret-key-change-in-production
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# Azure AI Search
-SEARCH_ENDPOINT=https://xxx.search.windows.net
-SEARCH_API_KEY=xxx
+# Storage
+STORAGE_TYPE=local
+LOCAL_STORAGE_PATH=./uploads
 
-# Azure OpenAI
-OPENAI_ENDPOINT=https://xxx.openai.azure.com
-OPENAI_API_KEY=xxx
+# AI Providers (Multi-vendor - configure at least one)
+OPENAI_API_KEY=sk-your-openai-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+QWEN_API_KEY=your-qwen-api-key          # Default for public books
+GOOGLE_API_KEY=your-google-api-key
+XAI_API_KEY=your-xai-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
 
-# Auth
-JWT_SECRET=xxx
-JWT_EXPIRY=15m
-REFRESH_EXPIRY=7d
+# AI Model Defaults
+AI_DEFAULT_MODEL_PUBLIC=qwen-turbo      # Cost-effective for public content
+AI_DEFAULT_MODEL_PRIVATE=gpt-4o-mini    # Higher quality for private books
 ```
+
+See `.env.example` for the complete list of configuration options.
 
 ## API Endpoints Summary
 

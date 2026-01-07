@@ -64,9 +64,12 @@ To provide a scalable, secure, and extensible API platform that enables hundreds
 │       │                    │                    │                    │
 │       ▼                    ▼                    ▼                    │
 │  ┌──────────┐        ┌──────────┐        ┌──────────┐               │
-│  │  Azure   │        │  Azure   │        │  OpenAI  │               │
-│  │  Services│        │  Fabric  │        │  API     │               │
+│  │  Azure   │        │  Azure   │        │Multi-AI  │               │
+│  │  Services│        │  Fabric  │        │Providers │               │
 │  └──────────┘        └──────────┘        └──────────┘               │
+│                                          (Qwen, OpenAI,              │
+│                                           Anthropic, Google,         │
+│                                           xAI, DeepSeek)             │
 │                                                                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -219,11 +222,12 @@ GET    /v1/users/{id}/books   Get user's public books
 ```
 
 #### FR-USER-002: User Preferences
-- Theme preference (light/dark)
+- Theme preference (light/dark/system)
 - Language preference
 - Notification settings
 - Privacy settings (profile visibility)
 - Reading preferences
+- **AI preferences** (default model, vendor, temperature, max tokens)
 
 #### FR-USER-003: Social Connections
 ```
@@ -318,14 +322,71 @@ Response:
 }
 ```
 
-#### FR-AI-003: Model Selection
-Supported models:
-- `gpt-4o` - Most capable
-- `gpt-4o-mini` - Fast and affordable (default)
-- `claude-3-opus` - Anthropic flagship
-- `claude-3-sonnet` - Balanced
-- `gemini-pro` - Google's model
-- `deepseek-chat` - Cost-effective
+#### FR-AI-003: Multi-Vendor Model Selection
+
+ILM Red supports multiple AI vendors for flexibility, cost optimization, and redundancy:
+
+**Supported Vendors & Models:**
+
+| Vendor | Models | Use Case |
+|--------|--------|----------|
+| **Qwen (Alibaba)** | qwen-turbo, qwen-plus, qwen-max | Default for public books (cost-effective) |
+| **OpenAI** | gpt-4o-mini, gpt-4o, gpt-4-turbo, o1-preview, o1-mini | Default for private books |
+| **Anthropic** | claude-3-haiku, claude-3-5-sonnet, claude-3-opus | Long-form content |
+| **Google** | gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash | Long context windows |
+| **xAI** | grok-beta, grok-2 | Alternative option |
+| **DeepSeek** | deepseek-chat, deepseek-coder | Cost-effective alternative |
+
+**Model Routing Strategy:**
+
+1. **Public Books**: Use Qwen (qwen-turbo) by default
+   - Reason: Cost-effective at $0.40/1M tokens
+   - Accessible to all users including anonymous
+
+2. **Private Books**: Use user's preferred model (default: gpt-4o-mini)
+   - Users can set their preferred model in preferences
+   - Premium users have access to all models
+
+3. **Explicit Override**: User can specify model in request
+   - Validation against available models for user tier
+   - Premium-only models require premium subscription
+
+**Free Tier Models:**
+- qwen-turbo, gpt-4o-mini, gemini-1.5-flash, deepseek-chat, claude-3-haiku
+
+**Premium-Only Models:**
+- All other models (gpt-4o, claude-3-opus, etc.)
+
+**Model Selection API:**
+```json
+POST /v1/ai/sessions/{id}/messages
+{
+  "content": "What is the main theme?",
+  "model": "claude-3-sonnet"  // optional - overrides defaults
+}
+```
+
+**Available Models Endpoint:**
+```
+GET /v1/ai/models
+```
+Response:
+```json
+{
+  "data": [
+    {
+      "id": "qwen-turbo",
+      "name": "Qwen Turbo",
+      "vendor": "qwen",
+      "maxTokens": 8192,
+      "inputCostPer1M": 0.10,
+      "outputCostPer1M": 0.30,
+      "premium": false,
+      "accessible": true
+    }
+  ]
+}
+```
 
 #### FR-AI-004: Book Context
 - Automatically include book content as context

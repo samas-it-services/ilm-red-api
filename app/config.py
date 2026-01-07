@@ -53,9 +53,18 @@ class Settings(BaseSettings):
     azure_storage_connection_string: str | None = None
     azure_storage_container: str = "books"
 
-    # AI Providers
+    # AI Providers (Multi-vendor support)
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    qwen_api_key: str | None = None  # Alibaba DashScope API key
+    google_api_key: str | None = None  # Google AI API key
+    xai_api_key: str | None = None  # xAI/Grok API key
+    deepseek_api_key: str | None = None  # DeepSeek API key
+
+    # AI Model Defaults
+    ai_default_model_public: str = "qwen-turbo"  # Cost-effective for public books
+    ai_default_model_private: str = "gpt-4o-mini"  # Balanced for private books
+    ai_fallback_model: str = "gpt-4o-mini"  # Fallback if primary unavailable
 
     # Rate Limiting (per minute)
     rate_limit_free: int = 60

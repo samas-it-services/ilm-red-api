@@ -1,9 +1,51 @@
 """User schemas."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+class AIPreferences(BaseModel):
+    """User AI preferences for model selection and behavior."""
+
+    default_model: str | None = Field(
+        default=None,
+        description="User's preferred AI model for private books (e.g., 'gpt-4o-mini', 'claude-3-sonnet')",
+    )
+    default_vendor: Literal["openai", "anthropic", "qwen", "google", "xai", "deepseek"] | None = Field(
+        default=None,
+        description="Preferred AI vendor",
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Default sampling temperature for AI responses",
+    )
+    max_tokens: int = Field(
+        default=4096,
+        ge=256,
+        le=32768,
+        description="Default maximum tokens for AI responses",
+    )
+    streaming_enabled: bool = Field(
+        default=True,
+        description="Whether to stream AI responses",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "default_model": "gpt-4o-mini",
+                "default_vendor": "openai",
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "streaming_enabled": True,
+            }
+        }
+    )
 
 
 class UserPreferences(BaseModel):
@@ -15,6 +57,10 @@ class UserPreferences(BaseModel):
     notifications: dict[str, bool] = Field(
         default={"email": True, "push": True},
     )
+    ai: AIPreferences = Field(
+        default_factory=AIPreferences,
+        description="AI-related preferences for model selection",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -23,6 +69,11 @@ class UserPreferences(BaseModel):
                 "language": "en",
                 "timezone": "America/New_York",
                 "notifications": {"email": True, "push": False},
+                "ai": {
+                    "default_model": "gpt-4o-mini",
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                },
             }
         }
     )
@@ -58,6 +109,10 @@ class UserResponse(BaseModel):
                 "preferences": {
                     "theme": "dark",
                     "language": "en",
+                    "ai": {
+                        "default_model": "gpt-4o-mini",
+                        "temperature": 0.7,
+                    },
                 },
                 "created_at": "2025-01-01T12:00:00Z",
                 "last_login_at": "2025-01-15T08:30:00Z",
@@ -104,6 +159,10 @@ class UserUpdate(BaseModel):
                 "preferences": {
                     "theme": "light",
                     "language": "en",
+                    "ai": {
+                        "default_model": "claude-3-sonnet",
+                        "temperature": 0.8,
+                    },
                 },
             }
         }

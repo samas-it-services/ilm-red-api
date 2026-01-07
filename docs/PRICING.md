@@ -41,15 +41,81 @@
 
 ## AI Cost Analysis
 
-### Provider Costs (Per 1M Tokens)
+### Multi-Vendor Model Pricing (Per 1M Tokens)
 
-| Model | Input Cost | Output Cost | Best For |
-|-------|------------|-------------|----------|
-| GPT-4o-mini | $0.15 | $0.60 | Default chat, summaries |
-| GPT-4o | $2.50 | $10.00 | Complex analysis |
-| Claude 3.5 Sonnet | $3.00 | $15.00 | Long-form content |
-| Claude 3 Haiku | $0.25 | $1.25 | Quick responses |
-| text-embedding-3-small | $0.02 | N/A | Vector embeddings |
+ILM Red supports multiple AI vendors for flexibility and cost optimization:
+
+#### Qwen (Alibaba) - Default for Public Books
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| qwen-turbo | $0.10 | $0.30 | 8K | **Default for public books** |
+| qwen-plus | $0.40 | $1.20 | 32K | Better quality |
+| qwen-max | $2.00 | $6.00 | 32K | Premium quality |
+
+#### OpenAI - Default for Private Books
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| gpt-4o-mini | $0.15 | $0.60 | 128K | **Default for private books** |
+| gpt-4o | $2.50 | $10.00 | 128K | Complex analysis, vision |
+| gpt-4-turbo | $10.00 | $30.00 | 128K | Most capable |
+| o1-preview | $15.00 | $60.00 | 128K | Advanced reasoning |
+| o1-mini | $3.00 | $12.00 | 128K | Efficient reasoning |
+
+#### Anthropic (Claude)
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| claude-3-haiku | $0.25 | $1.25 | 200K | Quick responses |
+| claude-3-5-sonnet | $3.00 | $15.00 | 200K | Long-form content |
+| claude-3-opus | $15.00 | $75.00 | 200K | Most capable |
+
+#### Google (Gemini)
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| gemini-1.5-flash | $0.075 | $0.30 | 1M | Fast, long context |
+| gemini-1.5-pro | $1.25 | $5.00 | 2M | Best quality |
+| gemini-2.0-flash | $0.10 | $0.40 | 1M | Experimental |
+
+#### xAI (Grok)
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| grok-beta | $0.50 | $1.50 | 131K | Alternative |
+| grok-2 | $0.50 | $1.50 | 131K | Latest version |
+
+#### DeepSeek
+| Model | Input Cost | Output Cost | Context | Best For |
+|-------|------------|-------------|---------|----------|
+| deepseek-chat | $0.14 | $0.28 | 64K | Cost-effective alternative |
+| deepseek-coder | $0.14 | $0.28 | 64K | Code-focused tasks |
+
+#### Embedding Models
+| Model | Vendor | Cost per 1M | Dimensions | Best For |
+|-------|--------|-------------|------------|----------|
+| text-embedding-3-small | OpenAI | $0.02 | 1536 | Default embeddings |
+| text-embedding-3-large | OpenAI | $0.13 | 3072 | Higher quality |
+| text-embedding-004 | Google | $0.025 | 768 | Alternative |
+
+### Model Routing Strategy
+
+**Public Books:** Use Qwen (qwen-turbo) by default
+- Reason: Cost-effective at $0.40/1M tokens (combined)
+- Accessible to all users including anonymous
+- Good quality for general Q&A
+
+**Private Books:** User's preferred model (default: gpt-4o-mini)
+- Reason: Better quality for personal content
+- Users can set their preferred model in preferences
+- Premium users have access to all models
+
+### Free vs Premium Model Access
+
+| Model | Free Tier | Premium Tier |
+|-------|-----------|--------------|
+| qwen-turbo | Yes | Yes |
+| gpt-4o-mini | Yes | Yes |
+| gemini-1.5-flash | Yes | Yes |
+| deepseek-chat | Yes | Yes |
+| claude-3-haiku | Yes | Yes |
+| All other models | No | Yes |
 
 ### Feature Costs
 
@@ -85,8 +151,8 @@
 | Storage | Blob Storage (10 GB) | $2 |
 | CDN | Azure CDN (50 GB) | $4 |
 | Compute | Container Apps | $15 |
-| AI APIs | OpenAI (pay-per-use) | $50 |
-| **Total** | | **$112** |
+| AI APIs | Multi-vendor (Qwen + OpenAI) | $40 |
+| **Total** | | **$102** |
 
 ### Growth Phase (10,000 users)
 
@@ -98,9 +164,9 @@
 | Storage | Blob Storage (100 GB) | $20 |
 | CDN | Azure CDN (500 GB) | $40 |
 | Compute | Container Apps (2x) | $120 |
-| AI APIs | OpenAI | $150 |
+| AI APIs | Multi-vendor (Qwen primary) | $100 |
 | Monitoring | App Insights | $30 |
-| **Total** | | **$765** |
+| **Total** | | **$715** |
 
 ### Scale Phase (100,000 users)
 
@@ -112,10 +178,10 @@
 | Storage | Blob Storage (1 TB) | $200 |
 | CDN | Azure CDN (5 TB) | $400 |
 | Compute | AKS Cluster | $800 |
-| AI APIs | OpenAI | $3,750 |
+| AI APIs | Multi-vendor (Qwen + premium mix) | $2,500 |
 | Monitoring | Full suite | $300 |
 | Security | WAF, DDoS | $200 |
-| **Total** | | **$9,150** |
+| **Total** | | **$7,900** |
 
 ---
 
@@ -123,9 +189,9 @@
 
 | Scale | Total Users | Premium (10%) | Monthly Revenue | Costs | Profit | Margin |
 |-------|-------------|---------------|-----------------|-------|--------|--------|
-| Startup | 1,000 | 100 | $500 | $112 | $388 | 78% |
-| Growth | 10,000 | 1,500 | $7,500 | $765 | $6,735 | 90% |
-| Scale | 100,000 | 25,000 | $125,000 | $9,150 | $115,850 | 93% |
+| Startup | 1,000 | 100 | $500 | $102 | $398 | 80% |
+| Growth | 10,000 | 1,500 | $7,500 | $715 | $6,785 | 90% |
+| Scale | 100,000 | 25,000 | $125,000 | $7,900 | $117,100 | 94% |
 
 ---
 

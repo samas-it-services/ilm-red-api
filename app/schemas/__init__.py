@@ -5,6 +5,7 @@ from app.schemas.common import (
     PaginatedResponse,
     ErrorResponse,
     ErrorDetail,
+    create_pagination,
 )
 from app.schemas.auth import (
     LoginRequest,
@@ -19,6 +20,30 @@ from app.schemas.user import (
     UserUpdate,
     PublicUserResponse,
 )
+from app.schemas.book import (
+    BookCategory,
+    Visibility,
+    BookStatus,
+    BookStats,
+    UserBrief,
+    BookCreate,
+    BookUpdate,
+    BookFilters,
+    BookResponse,
+    BookListItem,
+    BookListResponse,
+    BookUploadResponse,
+    DownloadUrlResponse,
+)
+from app.schemas.rating import (
+    RatingCreate,
+    RatingUpdate,
+    RatingResponse,
+    RatingListResponse,
+    RatingSummary,
+    FavoriteResponse,
+    FavoriteListResponse,
+)
 
 __all__ = [
     # Common
@@ -26,6 +51,7 @@ __all__ = [
     "PaginatedResponse",
     "ErrorResponse",
     "ErrorDetail",
+    "create_pagination",
     # Auth
     "LoginRequest",
     "RegisterRequest",
@@ -37,4 +63,26 @@ __all__ = [
     "UserResponse",
     "UserUpdate",
     "PublicUserResponse",
+    # Book
+    "BookCategory",
+    "Visibility",
+    "BookStatus",
+    "BookStats",
+    "UserBrief",
+    "BookCreate",
+    "BookUpdate",
+    "BookFilters",
+    "BookResponse",
+    "BookListItem",
+    "BookListResponse",
+    "BookUploadResponse",
+    "DownloadUrlResponse",
+    # Rating
+    "RatingCreate",
+    "RatingUpdate",
+    "RatingResponse",
+    "RatingListResponse",
+    "RatingSummary",
+    "FavoriteResponse",
+    "FavoriteListResponse",
 ]

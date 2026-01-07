@@ -1535,11 +1535,38 @@ paths:
                   description: Multiple book IDs for multi-book chat (Premium feature)
                 modelId:
                   type: string
-                  enum: [gpt-4o, gpt-4o-mini, claude-3-opus, claude-3-sonnet, gemini-pro]
-                  default: gpt-4o-mini
+                  description: |
+                    AI model to use. If not specified, model is selected automatically:
+                    - Public books: qwen-turbo (cost-effective)
+                    - Private books: User's preferred model or gpt-4o-mini
+                  enum:
+                    # Qwen (Alibaba) - Default for public books
+                    - qwen-turbo
+                    - qwen-plus
+                    - qwen-max
+                    # OpenAI - Default for private books
+                    - gpt-4o-mini
+                    - gpt-4o
+                    - gpt-4-turbo
+                    - o1-preview
+                    - o1-mini
+                    # Anthropic
+                    - claude-3-haiku
+                    - claude-3-5-sonnet
+                    - claude-3-opus
+                    # Google
+                    - gemini-1.5-flash
+                    - gemini-1.5-pro
+                    - gemini-2.0-flash
+                    # xAI
+                    - grok-beta
+                    - grok-2
+                    # DeepSeek
+                    - deepseek-chat
+                    - deepseek-coder
             example:
               bookIds: ["ffe66482-4ee7-4de8-8c94-38d5414c1d17", "abc12345-1234-5678-9abc-def012345678"]
-              modelId: "gpt-4o-mini"
+              modelId: "qwen-turbo"
       responses:
         '201':
           description: Session created
@@ -1590,6 +1617,14 @@ paths:
       tags:
         - AI
       summary: Send message to AI
+      description: |
+        Send a message to the AI chat session and receive a response.
+
+        **Model Selection:**
+        - If `model` is specified, that model will be used (if user has access)
+        - Otherwise, model is selected based on book visibility:
+          - Public books: qwen-turbo (cost-effective)
+          - Private books: User's preferred model from preferences
       operationId: sendAiMessage
       parameters:
         - name: sessionId
@@ -1609,6 +1644,11 @@ paths:
                 content:
                   type: string
                   maxLength: 10000
+                  description: The message content to send to the AI
+                model:
+                  type: string
+                  description: Override the default model for this message only
+                  example: claude-3-sonnet
       responses:
         '200':
           description: AI response
@@ -1617,7 +1657,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AiMessage'
         '402':
-          description: Insufficient credits
+          description: Insufficient credits or premium model requires subscription
 
   /ai/sessions/{sessionId}/export:
     get:
@@ -1670,19 +1710,51 @@ paths:
       tags:
         - AI
       summary: List available AI models
+      description: |
+        Get a list of all available AI models with their capabilities and pricing.
+
+        **Multi-Vendor Support:**
+        ILM Red supports multiple AI vendors for flexibility and cost optimization:
+        - **Qwen (Alibaba)** - Default for public books, cost-effective
+        - **OpenAI** - Default for private books, high quality
+        - **Anthropic** - Long-form content, large context
+        - **Google** - Very long context windows (up to 2M tokens)
+        - **xAI** - Alternative option
+        - **DeepSeek** - Cost-effective alternative
+
+        **Free Tier Models:**
+        qwen-turbo, gpt-4o-mini, gemini-1.5-flash, deepseek-chat, claude-3-haiku
+
+        **Premium Models:**
+        All other models require premium subscription
       operationId: listAiModels
+      parameters:
+        - name: vendor
+          in: query
+          description: Filter by vendor
+          schema:
+            type: string
+            enum: [openai, anthropic, qwen, google, xai, deepseek]
       responses:
         '200':
-          description: Available models
+          description: Available models grouped by vendor
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  models:
+                  data:
                     type: array
                     items:
                       $ref: '#/components/schemas/AiModel'
+                  defaultPublic:
+                    type: string
+                    description: Default model for public books
+                    example: qwen-turbo
+                  defaultPrivate:
+                    type: string
+                    description: Default model for private books
+                    example: gpt-4o-mini
 
   /ai/billing/balance:
     get:
@@ -2936,21 +3008,53 @@ components:
 
     AiModel:
       type: object
+      description: AI model configuration with pricing and capabilities
       properties:
         id:
           type: string
+          description: Unique model identifier (e.g., 'gpt-4o-mini', 'qwen-turbo')
+          example: qwen-turbo
         name:
           type: string
-        provider:
+          description: Display name for the model
+          example: Qwen Turbo
+        vendor:
           type: string
-        description:
-          type: string
+          description: AI vendor/provider name
+          enum: [openai, anthropic, qwen, google, xai, deepseek]
+          example: qwen
         maxTokens:
           type: integer
+          description: Maximum tokens in response
+          example: 8192
+        contextWindow:
+          type: integer
+          description: Maximum context window size
+          example: 8192
         inputCostPer1M:
           type: number
+          description: Cost per 1 million input tokens in USD
+          example: 0.10
         outputCostPer1M:
           type: number
+          description: Cost per 1 million output tokens in USD
+          example: 0.30
+        supportsStreaming:
+          type: boolean
+          description: Whether the model supports streaming responses
+          default: true
+        supportsVision:
+          type: boolean
+          description: Whether the model supports image/vision inputs
+          default: false
+        premium:
+          type: boolean
+          description: Whether this model requires premium subscription
+          example: false
+        accessible:
+          type: boolean
+          description: Whether the current user can access this model
+          example: true
 
     AiUsageRecord:
       type: object

@@ -28,10 +28,12 @@ pydantic-settings = "^2.1.0"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["argon2"], version = "^1.7.4"}
 
-# AI Providers
+# AI Providers (Multi-vendor support)
 openai = "^1.10.0"
 anthropic = "^0.14.0"
+google-generativeai = "^0.4.0"  # Google Gemini
 tiktoken = "^0.5.2"
+# Note: Qwen (DashScope), xAI, and DeepSeek use httpx with OpenAI-compatible APIs
 
 # Storage
 azure-storage-blob = "^12.19.0"
@@ -60,6 +62,7 @@ faker = "^22.0.0"
 ruff = "^0.1.11"
 mypy = "^1.8.0"
 pre-commit = "^3.6.0"
+aiosqlite = "^0.19.0"
 
 [build-system]
 requires = ["poetry-core"]

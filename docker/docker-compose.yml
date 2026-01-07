@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../app:/app/app
+      - ../tests:/app/tests
+      - ../uploads:/app/uploads
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ilmred
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/uploads
+      - ENVIRONMENT=development
+      - DEBUG=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - ilmred-network
+
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ilmred
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ilmred"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ilmred-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ilmred-network
+
+  # Optional: Background worker for async tasks
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/ilmred
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: echo "Worker not implemented yet"
+    profiles:
+      - workers
+    networks:
+      - ilmred-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ilmred-network:
+    driver: bridge

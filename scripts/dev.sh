@@ -88,14 +88,51 @@ check_prerequisites() {
         missing=1
     fi
 
-    # Check Python
-    if command_exists python3; then
-        print_status "Python installed: $(python3 --version)"
+    # Check Python version (must be 3.12 or 3.13)
+    # Prefer python3.12 or python3.13 if available (Homebrew installs)
+    PYTHON_CMD=""
+    PYTHON_FOUND=0
+
+    # First, check for specific versioned Python commands
+    if command_exists python3.12; then
+        PYTHON_CMD="python3.12"
+        PYTHON_FOUND=1
+        print_status "Python installed: $(python3.12 --version) (python3.12)"
+    elif command_exists python3.13; then
+        PYTHON_CMD="python3.13"
+        PYTHON_FOUND=1
+        print_status "Python installed: $(python3.13 --version) (python3.13)"
+    elif command_exists python3; then
+        # Fall back to python3 and check version
+        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        case "$PYTHON_VERSION" in
+            3.12|3.13)
+                PYTHON_CMD="python3"
+                PYTHON_FOUND=1
+                print_status "Python installed: $(python3 --version)"
+                ;;
+            3.14*)
+                print_warning "Default python3 is $PYTHON_VERSION (pre-release, not supported)"
+                print_info "Key packages (tiktoken, asyncpg) don't have wheels for Python 3.14 yet."
+                print_info "Please install Python 3.12 or 3.13:"
+                print_info "  brew install python@3.12"
+                print_info "  # Or use pyenv: pyenv install 3.12.8 && pyenv local 3.12.8"
+                missing=1
+                ;;
+            *)
+                print_error "Python $PYTHON_VERSION detected, but Python 3.12 or 3.13 is required"
+                print_info "  https://www.python.org/downloads/"
+                missing=1
+                ;;
+        esac
     else
-        print_error "Python 3 not found. Please install Python 3.12+:"
+        print_error "Python 3 not found. Please install Python 3.12 or 3.13:"
         print_info "  https://www.python.org/downloads/"
         missing=1
     fi
+
+    # Export the Python command for later use
+    export PYTHON_CMD
 
     # Check Poetry
     if command_exists poetry; then
@@ -143,6 +180,15 @@ install_deps() {
     print_header "Installing Python Dependencies"
 
     cd "$PROJECT_ROOT"
+
+    # Ensure Poetry uses Python 3.12 if available
+    if command_exists python3.12; then
+        print_info "Configuring Poetry to use python3.12..."
+        poetry env use python3.12 2>/dev/null || true
+    elif command_exists python3.13; then
+        print_info "Configuring Poetry to use python3.13..."
+        poetry env use python3.13 2>/dev/null || true
+    fi
 
     if [ ! -d ".venv" ] && [ -z "$VIRTUAL_ENV" ]; then
         print_info "Creating virtual environment..."

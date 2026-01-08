@@ -20,6 +20,61 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-08 | 🐛 fix: Fix dev.sh startup issues (Python 3.14, PostgreSQL, dependencies)
+
+### 📄 **Summary**
+Fixed multiple issues preventing `scripts/dev.sh` from running successfully on macOS with Python 3.14 and Homebrew PostgreSQL. The API now starts correctly with proper Python version detection, dependency management, and database connectivity.
+
+### 📁 **Files Changed**
+
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `scripts/dev.sh` | Modified | Added Python 3.12/3.13 version detection, auto-configure Poetry to use correct Python |
+| `pyproject.toml` | Modified | Set `python = ">=3.12,<3.14"`, added `package-mode = false`, added `email-validator` |
+| `app/db/migrations/env.py` | Modified | Added sys.path.insert for project root imports |
+| `.env` | Modified | Changed CORS_ORIGINS to JSON array format |
+
+### 🧠 **Rationale**
+
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| Python 3.14 incompatibility | tiktoken, asyncpg don't have pre-built wheels for Python 3.14 (alpha) | Added version check, prefer python3.12/3.13 |
+| Poetry package-mode error | Project is an API, not a library | Added `package-mode = false` |
+| Alembic module not found | Project root not in Python path | Added sys.path.insert in env.py |
+| CORS_ORIGINS parsing error | Pydantic expects JSON array, not CSV | Changed to JSON array format |
+| PostgreSQL "role postgres" error | Homebrew PostgreSQL 17 conflicts on port 5432 | Documented: stop Homebrew pg17 |
+| Missing email-validator | Pydantic EmailStr requires it | Added dependency |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| Python version check | dev.sh now rejects Python 3.14+, prefers python3.12 |
+| package-mode = false | Poetry no longer tries to install project as package |
+| sys.path fix | Alembic migrations work without PYTHONPATH |
+| email-validator | Required for user email validation |
+
+### 🧪 **Testing Recommendations**
+
+```bash
+# Stop Homebrew PostgreSQL if running
+brew services stop postgresql@17
+
+# Run dev script
+./scripts/dev.sh
+
+# Verify API health
+curl http://localhost:8000/v1/health
+# Expected: {"status":"healthy",...}
+```
+
+### 📌 **Follow‑ups**
+- [ ] Add Windows PowerShell equivalent for Python version detection
+- [ ] Consider adding pyenv/asdf support to dev.sh
+- [ ] Update .env.example with CORS_ORIGINS JSON format
+
+---
+
 ## 2026-01-07 | 🚀 feat: Phase 2 Books CRUD, Multi-Vendor AI, and Local Dev Setup
 
 ### 📄 **Summary**

@@ -20,6 +20,91 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-09 | 🚀 feat: Azure deployment fixes, auto-migrations, and API test suite
+
+### 📄 **Summary**
+Fixed Azure Container Apps deployment issues causing HTTP 500 errors on user registration. Added Docker entrypoint script to automatically run database migrations on container startup. Created comprehensive API test suite with curl-based scripts for all endpoints. Fixed infrastructure configuration for PostgreSQL SSL, health probes, and SQLAlchemy connection pooling.
+
+### 📁 **Files Changed**
+
+#### Docker & Migrations
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `docker/entrypoint.sh` | Added | Entrypoint script that runs `alembic upgrade head` before starting uvicorn |
+| `docker/Dockerfile` | Modified | Use entrypoint script instead of direct CMD |
+| `scripts/deploy-azure.sh` | Modified | Renamed misleading `run_migrations()` to `verify_app_health()` |
+
+#### Infrastructure (Bicep)
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `infra/main.bicep` | Modified | Fixed parameter passing for PostgreSQL SSL |
+| `infra/modules/postgresql.bicep` | Modified | Changed DATABASE_URL to use `ssl=require` instead of `sslmode=require` |
+| `infra/modules/container-apps.bicep` | Modified | Changed health probe paths from `/health` to `/v1/health` |
+
+#### Database Connection
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/db/session.py` | Modified | Use `NullPool` for serverless environments (Azure Container Apps) |
+
+#### API Test Suite
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `scripts/api-tests/README.md` | Added | Documentation with Azure details and troubleshooting guide |
+| `scripts/api-tests/config.sh` | Added | Shared configuration and helper functions |
+| `scripts/api-tests/run-all-tests.sh` | Added | Master test runner script |
+| `scripts/api-tests/.gitignore` | Added | Ignore test data directory |
+| `scripts/api-tests/01-health/*` | Added | Health check tests |
+| `scripts/api-tests/02-auth/*` | Added | Auth tests (register, login, refresh, logout) |
+| `scripts/api-tests/03-api-keys/*` | Added | API key management tests |
+| `scripts/api-tests/04-users/*` | Added | User profile tests |
+| `scripts/api-tests/05-books/*` | Added | Book CRUD tests |
+| `scripts/api-tests/06-ratings/*` | Added | Rating tests |
+| `scripts/api-tests/07-favorites/*` | Added | Favorites tests |
+
+### 🧠 **Rationale**
+
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| HTTP 500 on registration | Database tables didn't exist - migrations never ran | Created `docker/entrypoint.sh` to run migrations on startup |
+| Misleading function name | `run_migrations()` only did health checks | Renamed to `verify_app_health()` |
+| PostgreSQL SSL error | asyncpg uses `ssl=` not `sslmode=` | Changed connection string format |
+| Health probe failures | Probes hit `/health` but API uses `/v1/health` | Updated Bicep templates |
+| Connection pool errors | SQLAlchemy default pool incompatible with serverless | Use `NullPool` in production |
+| No API testing tools | Manual curl commands scattered | Created organized test suite |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| Entrypoint script | Migrations run automatically on every deployment |
+| NullPool | Each request gets fresh connection (slightly higher latency, more reliable) |
+| Health probe path | Azure health checks now hit correct endpoint |
+| Test suite | Developers can quickly validate API functionality |
+
+### 🧪 **Testing Recommendations**
+
+```bash
+# Test health endpoint
+./scripts/api-tests/01-health/test-health.sh
+
+# Test user registration
+./scripts/api-tests/02-auth/test-register.sh user@example.com Password123! username "Display Name"
+
+# Run all tests
+./scripts/api-tests/run-all-tests.sh
+
+# View container logs
+az containerapp logs show --name ilmred-prod-api --resource-group ilmred-prod-rg --tail 100
+```
+
+### 📌 **Follow‑ups**
+- [ ] Add CI/CD pipeline to run test suite on PRs
+- [ ] Add load testing scripts
+- [ ] Implement migration rollback strategy
+- [ ] Add Prometheus metrics endpoint
+
+---
+
 ## 2026-01-08 | 🐛 fix: Fix dev.sh startup issues (Python 3.14, PostgreSQL, dependencies)
 
 ### 📄 **Summary**

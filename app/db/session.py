@@ -12,13 +12,17 @@ logger = structlog.get_logger(__name__)
 
 # Create async engine
 # Use NullPool for serverless deployments (Azure Container Apps)
-engine = create_async_engine(
-    str(settings.database_url),
-    echo=settings.db_echo,
-    pool_size=settings.db_pool_size if not settings.is_production else 0,
-    max_overflow=settings.db_max_overflow if not settings.is_production else 0,
-    poolclass=NullPool if settings.is_production else None,
-)
+# NullPool doesn't accept pool_size/max_overflow arguments
+_engine_kwargs: dict = {
+    "echo": settings.db_echo,
+}
+if settings.is_production:
+    _engine_kwargs["poolclass"] = NullPool
+else:
+    _engine_kwargs["pool_size"] = settings.db_pool_size
+    _engine_kwargs["max_overflow"] = settings.db_max_overflow
+
+engine = create_async_engine(str(settings.database_url), **_engine_kwargs)
 
 # Session factory
 async_session_factory = async_sessionmaker(

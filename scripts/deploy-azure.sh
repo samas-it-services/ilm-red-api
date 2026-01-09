@@ -34,7 +34,7 @@ INFRA_DIR="$PROJECT_ROOT/infra"
 
 # Default configuration
 ENVIRONMENT="${1:-prod}"
-LOCATION="eastus"  # Cheapest US region
+LOCATION="westus2"  # Changed from eastus due to PostgreSQL quota restrictions
 RESOURCE_GROUP="ilmred-${ENVIRONMENT}-rg"
 DEPLOYMENT_NAME="ilmred-${ENVIRONMENT}-$(date +%Y%m%d%H%M%S)"
 
@@ -302,21 +302,16 @@ update_container_app() {
     fi
 }
 
-# Run database migrations
-run_migrations() {
-    print_header "Running Database Migrations"
+# Verify app health after deployment
+# Note: Migrations run automatically on container startup via entrypoint.sh
+verify_app_health() {
+    print_header "Verifying Application Health"
 
     local app_name="ilmred-${ENVIRONMENT}-api"
 
-    # Check if we can run migrations via the container
-    print_info "Migrations will run automatically on container startup"
-    print_info "The container runs: alembic upgrade head"
+    print_info "Migrations run automatically on container startup (via entrypoint.sh)"
+    print_step "Waiting for app to be ready..."
 
-    # Alternative: Run migrations via az containerapp exec
-    # This requires the app to be running
-    print_step "Checking if migrations are needed..."
-
-    # For now, just verify the app is running
     local app_url=$(az containerapp show \
         --name "$app_name" \
         --resource-group "$RESOURCE_GROUP" \
@@ -324,17 +319,18 @@ run_migrations() {
 
     if [ -n "$app_url" ]; then
         print_info "Container App URL: https://$app_url"
-        print_step "Waiting for app to be ready..."
         sleep 30
 
         # Health check
-        local health_status=$(curl -s -o /dev/null -w "%{http_code}" "https://$app_url/health" 2>/dev/null || echo "000")
+        local health_status=$(curl -s -o /dev/null -w "%{http_code}" "https://$app_url/v1/health" 2>/dev/null || echo "000")
 
         if [ "$health_status" = "200" ]; then
-            print_status "App is healthy! Migrations completed."
+            print_status "App is healthy!"
         else
             print_warning "App returned status: $health_status"
             print_info "Check logs: az containerapp logs show --name $app_name --resource-group $RESOURCE_GROUP"
+            print_info "If you see database errors, verify migrations ran:"
+            print_info "  az containerapp exec --name $app_name --resource-group $RESOURCE_GROUP --command 'alembic current'"
         fi
     fi
 }
@@ -405,7 +401,7 @@ main() {
     if [ "$INFRA_ONLY" = false ]; then
         build_and_push_image
         update_container_app
-        run_migrations
+        verify_app_health
     fi
 
     print_summary

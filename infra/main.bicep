@@ -63,6 +63,7 @@ param deepseekApiKey string = ''
 // ============================================================================
 
 var resourcePrefix = 'ilmred-${environment}'
+var uniqueSuffix = uniqueString(resourceGroup().id)  // Generate unique suffix based on resource group
 var tags = {
   environment: environment
   project: 'ilm-red-api'
@@ -98,7 +99,7 @@ module storage 'modules/storage.bicep' = {
 module keyVault 'modules/keyvault.bicep' = {
   name: 'keyvault-deployment'
   params: {
-    name: '${resourcePrefix}-kv'
+    name: '${resourcePrefix}-kv-${substring(uniqueSuffix, 0, 6)}'  // Add unique suffix to avoid name conflicts
     location: location
     tags: tags
     secrets: [
@@ -166,17 +167,17 @@ module containerApps 'modules/container-apps.bicep' = {
       { name: 'DEEPSEEK_API_KEY', secretRef: 'deepseek-api-key' }
       { name: 'AI_DEFAULT_MODEL_PUBLIC', value: 'qwen-turbo' }
       { name: 'AI_DEFAULT_MODEL_PRIVATE', value: 'gpt-4o-mini' }
-      { name: 'CORS_ORIGINS', value: '*' }  // Update for production
+      { name: 'CORS_ORIGINS', value: '["*"]' }  // JSON array format required by Pydantic
     ]
     secrets: [
       { name: 'jwt-secret', value: jwtSecret }
       { name: 'storage-connection-string', value: storage.outputs.connectionString }
-      { name: 'openai-api-key', value: openaiApiKey }
-      { name: 'anthropic-api-key', value: anthropicApiKey }
-      { name: 'qwen-api-key', value: qwenApiKey }
-      { name: 'google-api-key', value: googleApiKey }
-      { name: 'xai-api-key', value: xaiApiKey }
-      { name: 'deepseek-api-key', value: deepseekApiKey }
+      { name: 'openai-api-key', value: empty(openaiApiKey) ? 'not-configured' : openaiApiKey }
+      { name: 'anthropic-api-key', value: empty(anthropicApiKey) ? 'not-configured' : anthropicApiKey }
+      { name: 'qwen-api-key', value: empty(qwenApiKey) ? 'not-configured' : qwenApiKey }
+      { name: 'google-api-key', value: empty(googleApiKey) ? 'not-configured' : googleApiKey }
+      { name: 'xai-api-key', value: empty(xaiApiKey) ? 'not-configured' : xaiApiKey }
+      { name: 'deepseek-api-key', value: empty(deepseekApiKey) ? 'not-configured' : deepseekApiKey }
     ]
   }
 }

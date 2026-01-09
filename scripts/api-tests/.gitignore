@@ -1,0 +1,6 @@
+# Test data directory (contains tokens and test files)
+.test-data/
+
+# Sample files generated during tests
+*.test.txt
+*.test.pdf

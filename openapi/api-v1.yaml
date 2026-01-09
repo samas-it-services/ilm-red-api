@@ -62,8 +62,12 @@ tags:
     description: User profile and social operations
   - name: Search
     description: Search and discovery
+  - name: Chat
+    description: AI chat sessions and messaging with streaming support
   - name: AI
-    description: AI chat and analysis
+    description: AI models, safety, and cost estimation
+  - name: Billing
+    description: Credits, usage tracking, and transaction history
   - name: Clubs
     description: Book club management
   - name: Progress
@@ -1827,6 +1831,487 @@ paths:
                   pagination:
                     $ref: '#/components/schemas/Pagination'
 
+  /ai/safety/categories:
+    get:
+      tags:
+        - AI
+      summary: List content safety categories
+      description: |
+        Get list of content safety categories used for moderation.
+        These categories are checked on both user input and AI output.
+      operationId: listSafetyCategories
+      security: []
+      responses:
+        '200':
+          description: Safety categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SafetyCategory'
+                  strictnessLevels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        level:
+                          type: string
+                          enum: [strict, moderate, minimal]
+                        description:
+                          type: string
+
+  /ai/estimate:
+    post:
+      tags:
+        - AI
+      summary: Estimate cost for AI operation
+      description: |
+        Estimate the cost of an AI operation before executing it.
+        Useful for showing users expected cost before chat messages.
+      operationId: estimateAiCost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operation
+              properties:
+                operation:
+                  type: string
+                  enum: [chat, summary, flashcards, quiz]
+                model:
+                  type: string
+                  description: Model to use (defaults to auto-selected)
+                estimatedInputTokens:
+                  type: integer
+                  description: Estimated input tokens (optional, will estimate if not provided)
+                bookId:
+                  type: string
+                  description: Book ID for context-based estimation
+      responses:
+        '200':
+          description: Cost estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostEstimate'
+
+  # ============= CHAT =============
+  /chats:
+    get:
+      tags:
+        - Chat
+      summary: List user's chat sessions
+      description: Get paginated list of chat sessions for the authenticated user.
+      operationId: listChatSessions
+      parameters:
+        - name: archived
+          in: query
+          description: Filter by archived status
+          schema:
+            type: boolean
+        - name: bookId
+          in: query
+          description: Filter by book ID
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of chat sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChatSession'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Chat
+      summary: Create new chat session
+      description: |
+        Create a new chat session. Sessions can be standalone or linked to a book
+        for context-aware AI chat.
+      operationId: createChatSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSessionCreate'
+      responses:
+        '201':
+          description: Chat session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /chats/{sessionId}:
+    get:
+      tags:
+        - Chat
+      summary: Get chat session with messages
+      description: Get a chat session with its message history (paginated).
+      operationId: getChatSession
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+        - name: messageLimit
+          in: query
+          description: Number of messages to include (default 50)
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Chat session with messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Chat
+      summary: Update chat session
+      description: Update session metadata (rename, archive).
+      operationId: updateChatSession
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                archived:
+                  type: boolean
+      responses:
+        '200':
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Chat
+      summary: Delete chat session
+      description: Permanently delete a chat session and all its messages.
+      operationId: deleteChatSession
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      responses:
+        '204':
+          description: Session deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /chats/{sessionId}/messages:
+    get:
+      tags:
+        - Chat
+      summary: Get messages in a chat session
+      description: Get paginated messages for a chat session.
+      operationId: getChatMessages
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: order
+          in: query
+          description: Sort order (asc = oldest first, desc = newest first)
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChatMessage'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Chat
+      summary: Send message (non-streaming)
+      description: |
+        Send a message to the AI and receive a complete response.
+        For real-time streaming, use POST /chats/{sessionId}/stream instead.
+      operationId: sendChatMessage
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageCreate'
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '402':
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsufficientCreditsError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /chats/{sessionId}/stream:
+    post:
+      tags:
+        - Chat
+      summary: Send message with streaming response (SSE)
+      description: |
+        Send a message to the AI and receive a streaming response via Server-Sent Events.
+
+        **Event Types:**
+        - `chunk`: Content chunk `{"type": "chunk", "content": "Hello"}`
+        - `tokens`: Token count update `{"type": "tokens", "input": 50, "output": 10}`
+        - `done`: Stream complete `{"type": "done", "finish_reason": "stop", "message_id": "uuid", "cost_cents": 2}`
+        - `error`: Error occurred `{"type": "error", "code": "RATE_LIMITED", "message": "..."}`
+
+        **Client Implementation:**
+        Use EventSource API (web) or SSE library (mobile) to consume the stream.
+      operationId: streamChatMessage
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageCreate'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '402':
+          description: Insufficient credits
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /chats/{sessionId}/messages/{messageId}/feedback:
+    post:
+      tags:
+        - Chat
+      summary: Rate a message (thumbs up/down)
+      description: Provide feedback on an AI response for quality tracking.
+      operationId: rateChatMessage
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  enum: [-1, 1]
+                  description: -1 for thumbs down, 1 for thumbs up
+                comment:
+                  type: string
+                  maxLength: 500
+                  description: Optional feedback comment
+      responses:
+        '201':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageFeedback'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Feedback already submitted for this message
+
+  # ============= BILLING =============
+  /billing/balance:
+    get:
+      tags:
+        - Billing
+      summary: Get current credit balance
+      description: Get user's current credit balance and free credits remaining.
+      operationId: getBillingBalance
+      responses:
+        '200':
+          description: Credit balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
+
+  /billing/usage:
+    get:
+      tags:
+        - Billing
+      summary: Get usage summary by period
+      description: Get aggregated usage statistics for a time period.
+      operationId: getBillingUsage
+      parameters:
+        - name: period
+          in: query
+          description: Time period for aggregation
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: month
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+
+  /billing/transactions:
+    get:
+      tags:
+        - Billing
+      summary: List billing transactions
+      description: Get paginated list of billing transactions.
+      operationId: listBillingTransactions
+      parameters:
+        - name: operationType
+          in: query
+          description: Filter by operation type
+          schema:
+            type: string
+            enum: [chat, summary, search, embedding, flashcards, quiz]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Billing transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BillingTransaction'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /billing/transactions/{transactionId}:
+    get:
+      tags:
+        - Billing
+      summary: Get single transaction detail
+      description: Get detailed information about a specific billing transaction.
+      operationId: getBillingTransaction
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingTransaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /billing/limits:
+    get:
+      tags:
+        - Billing
+      summary: Get user's usage limits
+      description: Get current usage limits and remaining allowances.
+      operationId: getBillingLimits
+      responses:
+        '200':
+          description: Usage limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageLimits'
+
   # ============= CLUBS =============
   /clubs:
     get:
@@ -2421,6 +2906,15 @@ components:
       required: true
       schema:
         type: string
+
+    SessionIdParam:
+      name: sessionId
+      in: path
+      required: true
+      description: Chat session ID
+      schema:
+        type: string
+        format: uuid
 
   responses:
     Unauthorized:
@@ -3758,3 +4252,459 @@ components:
         fileName: "chat-session-2025-07-15.pdf"
         fileSize: 125000
         expiresAt: "2025-07-16T15:00:00Z"
+
+    # ============= CHAT SCHEMAS =============
+    ChatSession:
+      type: object
+      description: A chat session with message history
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        bookId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional book ID for book-context chat
+        title:
+          type: string
+          description: Session title (auto-generated or user-provided)
+        messageCount:
+          type: integer
+          description: Number of messages in session
+        lastModel:
+          type: string
+          description: Last AI model used in this session
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+      example:
+        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        userId: "user_abc123"
+        bookId: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        title: "Discussion about Chapter 3"
+        messageCount: 12
+        lastModel: "gpt-4o-mini"
+        createdAt: "2026-01-09T10:00:00Z"
+        updatedAt: "2026-01-09T10:30:00Z"
+        archivedAt: null
+
+    ChatSessionCreate:
+      type: object
+      description: Request body for creating a chat session
+      properties:
+        bookId:
+          type: string
+          format: uuid
+          description: Optional book ID for book-context chat
+        title:
+          type: string
+          maxLength: 200
+          description: Optional session title (auto-generated if not provided)
+        model:
+          type: string
+          description: Initial AI model to use (defaults to auto-selected)
+      example:
+        bookId: "ffe66482-4ee7-4de8-8c94-38d5414c1d17"
+        title: "Questions about Islamic Finance"
+
+    ChatSessionDetail:
+      allOf:
+        - $ref: '#/components/schemas/ChatSession'
+        - type: object
+          properties:
+            book:
+              $ref: '#/components/schemas/Book'
+              description: Book details (if linked)
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+              description: Recent messages (paginated)
+            totalCostCents:
+              type: integer
+              description: Total cost of session in cents
+
+    ChatMessage:
+      type: object
+      description: A message in a chat session
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+          description: Message content
+        tokensInput:
+          type: integer
+          nullable: true
+          description: Input tokens (null for user messages)
+        tokensOutput:
+          type: integer
+          nullable: true
+          description: Output tokens (null for user messages)
+        costCents:
+          type: integer
+          nullable: true
+          description: Cost in cents (null for user messages)
+        model:
+          type: string
+          nullable: true
+          description: Model used (null for user messages)
+        finishReason:
+          type: string
+          enum: [stop, length, content_filter, tool_calls]
+          nullable: true
+          description: Why AI stopped generating
+        safetyFlags:
+          type: array
+          items:
+            type: string
+          description: Safety categories flagged (if any)
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: "msg_abc123"
+        sessionId: "sess_xyz789"
+        role: "assistant"
+        content: "Chapter 3 explores the concept of riba (interest) in Islamic finance..."
+        tokensInput: 150
+        tokensOutput: 250
+        costCents: 1
+        model: "gpt-4o-mini"
+        finishReason: "stop"
+        safetyFlags: []
+        createdAt: "2026-01-09T10:15:00Z"
+
+    ChatMessageCreate:
+      type: object
+      description: Request body for sending a chat message
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          maxLength: 10000
+          description: Message content
+        model:
+          type: string
+          description: Override model for this message (optional)
+      example:
+        content: "Can you summarize the main points of chapter 3?"
+        model: "gpt-4o-mini"
+
+    MessageFeedback:
+      type: object
+      description: User feedback on an AI message
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          enum: [-1, 1]
+          description: -1 for thumbs down, 1 for thumbs up
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ============= BILLING SCHEMAS =============
+    CreditBalance:
+      type: object
+      description: User's credit balance information
+      properties:
+        balanceCents:
+          type: integer
+          description: Current balance in USD cents
+        lifetimeUsageCents:
+          type: integer
+          description: Total lifetime usage in cents
+        freeCreditsRemaining:
+          type: integer
+          description: Free credits remaining for current period
+        freeCreditsResetAt:
+          type: string
+          format: date-time
+          description: When free credits reset
+        tier:
+          type: string
+          enum: [free, premium, enterprise]
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        balanceCents: 523
+        lifetimeUsageCents: 4477
+        freeCreditsRemaining: 100
+        freeCreditsResetAt: "2026-02-01T00:00:00Z"
+        tier: "free"
+        updatedAt: "2026-01-09T10:30:00Z"
+
+    BillingTransaction:
+      type: object
+      description: A billing transaction record
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        operationType:
+          type: string
+          enum: [chat, summary, search, embedding, flashcards, quiz]
+        operationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Reference to specific operation (e.g., message ID)
+        model:
+          type: string
+          description: AI model used
+        tokensInput:
+          type: integer
+        tokensOutput:
+          type: integer
+        costCents:
+          type: integer
+          description: Cost in USD cents
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: "txn_abc123"
+        userId: "user_xyz789"
+        operationType: "chat"
+        operationId: "msg_def456"
+        model: "gpt-4o-mini"
+        tokensInput: 150
+        tokensOutput: 200
+        costCents: 1
+        createdAt: "2026-01-09T15:30:00Z"
+
+    UsageSummary:
+      type: object
+      description: Aggregated usage statistics
+      properties:
+        period:
+          type: string
+          enum: [day, week, month]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalTokensInput:
+          type: integer
+        totalTokensOutput:
+          type: integer
+        totalCostCents:
+          type: integer
+        operationCounts:
+          type: object
+          properties:
+            chat:
+              type: integer
+            summary:
+              type: integer
+            flashcards:
+              type: integer
+            quiz:
+              type: integer
+            search:
+              type: integer
+        modelUsage:
+          type: array
+          items:
+            type: object
+            properties:
+              model:
+                type: string
+              tokensInput:
+                type: integer
+              tokensOutput:
+                type: integer
+              costCents:
+                type: integer
+              requestCount:
+                type: integer
+      example:
+        period: "month"
+        startDate: "2026-01-01"
+        endDate: "2026-01-31"
+        totalTokensInput: 45000
+        totalTokensOutput: 32000
+        totalCostCents: 85
+        operationCounts:
+          chat: 120
+          summary: 5
+          flashcards: 3
+          quiz: 2
+          search: 50
+        modelUsage:
+          - model: "gpt-4o-mini"
+            tokensInput: 30000
+            tokensOutput: 22000
+            costCents: 45
+            requestCount: 80
+          - model: "qwen-turbo"
+            tokensInput: 15000
+            tokensOutput: 10000
+            costCents: 40
+            requestCount: 100
+
+    UsageLimits:
+      type: object
+      description: User's usage limits and current usage
+      properties:
+        dailyTokensLimit:
+          type: integer
+          description: Max tokens per day
+        dailyTokensUsed:
+          type: integer
+        dailyTokensRemaining:
+          type: integer
+        dailyResetAt:
+          type: string
+          format: date-time
+        monthlyRequestsLimit:
+          type: integer
+          description: Max requests per month
+        monthlyRequestsUsed:
+          type: integer
+        monthlyRequestsRemaining:
+          type: integer
+        monthlyResetAt:
+          type: string
+          format: date-time
+        warningThreshold:
+          type: number
+          description: Percentage at which warnings are shown (e.g., 0.8 = 80%)
+        isLimited:
+          type: boolean
+          description: True if any limit has been reached
+      example:
+        dailyTokensLimit: 10000
+        dailyTokensUsed: 7500
+        dailyTokensRemaining: 2500
+        dailyResetAt: "2026-01-10T00:00:00Z"
+        monthlyRequestsLimit: 1000
+        monthlyRequestsUsed: 450
+        monthlyRequestsRemaining: 550
+        monthlyResetAt: "2026-02-01T00:00:00Z"
+        warningThreshold: 0.8
+        isLimited: false
+
+    # ============= SAFETY SCHEMAS =============
+    SafetyCategory:
+      type: object
+      description: A content safety category for moderation
+      properties:
+        id:
+          type: string
+          enum: [hate, violence, sexual, self_harm, illegal]
+        name:
+          type: string
+        description:
+          type: string
+        examples:
+          type: array
+          items:
+            type: string
+          description: Examples of content that triggers this category
+      example:
+        id: "hate"
+        name: "Hate Speech"
+        description: "Content that expresses hatred or discrimination based on protected characteristics"
+        examples:
+          - "Slurs and derogatory language"
+          - "Dehumanizing stereotypes"
+
+    CostEstimate:
+      type: object
+      description: Estimated cost for an AI operation
+      properties:
+        operation:
+          type: string
+          enum: [chat, summary, flashcards, quiz]
+        model:
+          type: string
+          description: Model that would be used
+        estimatedInputTokens:
+          type: integer
+        estimatedOutputTokens:
+          type: integer
+        estimatedCostCents:
+          type: integer
+          description: Estimated cost in cents
+        userBalanceCents:
+          type: integer
+          description: User's current balance
+        canAfford:
+          type: boolean
+          description: Whether user has sufficient credits
+      example:
+        operation: "chat"
+        model: "gpt-4o-mini"
+        estimatedInputTokens: 500
+        estimatedOutputTokens: 300
+        estimatedCostCents: 1
+        userBalanceCents: 523
+        canAfford: true
+
+    InsufficientCreditsError:
+      type: object
+      description: Error response when user has insufficient credits
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INSUFFICIENT_CREDITS"
+            message:
+              type: string
+            requiredCents:
+              type: integer
+              description: Minimum credits needed
+            currentBalanceCents:
+              type: integer
+              description: User's current balance
+            upgradeUrl:
+              type: string
+              format: uri
+              description: URL to upgrade subscription
+      example:
+        error:
+          code: "INSUFFICIENT_CREDITS"
+          message: "Your credit balance is too low for this operation"
+          requiredCents: 5
+          currentBalanceCents: 2
+          upgradeUrl: "https://ilm-red.com/billing/upgrade"

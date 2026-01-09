@@ -20,6 +20,64 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-09 | 📘 docs: Add deployment documentation and cold start optimization
+
+### 📄 **Summary**
+Added comprehensive deployment documentation to README.md and rewrote TDD.md Section 8 with accurate Python/FastAPI Azure deployment details. Also implemented configurable container scaling to eliminate cold starts (~$23/mo additional cost).
+
+### 📁 **Files Changed**
+
+#### Documentation
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `README.md` | Modified | Added "Deployment" section with Azure CLI commands, resource costs, and configuration |
+| `docs/TDD.md` | Modified | Rewrote Section 8 "Deployment & Operations" with accurate Python/Azure details |
+
+#### Infrastructure (Cold Start Optimization)
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `infra/parameters.json` | Modified | Added `containerMinReplicas: 1` and `containerMaxReplicas: 10` |
+| `infra/main.bicep` | Modified | Added scaling parameters with `@minValue`/`@maxValue` validation |
+| `infra/modules/container-apps.bicep` | Modified | Made `minReplicas`/`maxReplicas` configurable via parameters |
+
+### 🧠 **Rationale**
+
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| Missing deployment docs | README only had local dev setup | Added Azure deployment section |
+| Outdated TDD Section 8 | Had Node.js Dockerfile, generic YAML | Rewrote with actual Python/Bicep details |
+| 20-30s cold starts | `minReplicas: 0` caused scale-to-zero | Made scaling configurable, set `minReplicas: 1` |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| `minReplicas: 1` | Container always running, no cold starts, +$23/mo |
+| Configurable scaling | Can adjust via `parameters.json` without code changes |
+| Documentation | Developers can now deploy to Azure using README |
+
+### 🧪 **Testing Recommendations**
+
+```bash
+# Verify deployment docs
+cat README.md | grep -A 50 "## Deployment"
+
+# Check container is always-on
+az containerapp show --name ilmred-prod-api --resource-group ilmred-prod-rg \
+  --query "properties.template.scale.minReplicas"
+# Expected: 1
+
+# Test health endpoint (should respond immediately, no cold start)
+time curl -s https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/v1/health
+```
+
+### 📌 **Follow‑ups**
+- [ ] Add GitHub Actions CI/CD workflow
+- [ ] Document environment promotion (dev → staging → prod)
+- [ ] Add Terraform alternative to Bicep
+
+---
+
 ## 2026-01-09 | 🚀 feat: Azure deployment fixes, auto-migrations, and API test suite
 
 ### 📄 **Summary**

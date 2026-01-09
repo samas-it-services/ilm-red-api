@@ -65,6 +65,16 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 | Background | ARQ (Redis-based) |
 | Auth | JWT + API Keys (Argon2) |
 
+## Live API Documentation
+
+**Production API:** https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io
+
+| Documentation | URL |
+|---------------|-----|
+| **Swagger UI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/docs |
+| **ReDoc** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/redoc |
+| **OpenAPI JSON** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/openapi.json |
+
 ## Documentation
 
 | Document | Description |
@@ -73,6 +83,7 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 | [TDD](./docs/TDD.md) | Technical Design Document |
 | [Architecture](./docs/ARCHITECTURE.md) | System Architecture |
 | [OpenAPI](./openapi/api-v1.yaml) | API Specification |
+| [Implementation Plan](./.claude/plans/curious-percolating-valiant.md) | Current implementation plan |
 
 ## Key Design Principles
 
@@ -176,6 +187,74 @@ open http://localhost:8000/docs
 ./scripts/dev.sh test     # Run tests
 ./scripts/dev.sh reset    # Reset database (destructive!)
 ./scripts/dev.sh logs     # Show Docker logs
+```
+
+## Deployment
+
+### Prerequisites
+
+- **Azure CLI** - Install with: `brew install azure-cli`
+- **Docker**
+- **Azure subscription** with Owner/Contributor access
+
+### Deploy to Azure
+
+```bash
+# Login to Azure
+az login
+
+# Configure parameters (API keys, secrets)
+cp infra/parameters.example.json infra/parameters.json
+# Edit infra/parameters.json with your API keys
+
+# Deploy everything (infrastructure + app)
+./scripts/deploy-azure.sh prod
+
+# Or deploy only infrastructure
+./scripts/deploy-azure.sh prod --infra-only
+
+# Or deploy only app (after infra exists)
+./scripts/deploy-azure.sh prod --app-only
+```
+
+### Azure Resources Created
+
+| Resource | Purpose | Estimated Cost |
+|----------|---------|----------------|
+| Container Registry | Docker images | ~$5/mo |
+| Container Apps | API hosting | ~$23/mo (always-on) |
+| PostgreSQL Flexible | Database | ~$15/mo |
+| Redis Cache | Caching | ~$16/mo |
+| Storage Account | File storage | ~$1/mo |
+| Key Vault | Secrets | ~$0.03/mo |
+
+**Total**: ~$60/mo (always-on) or ~$35/mo (scale-to-zero)
+
+### Configuration
+
+Edit `infra/parameters.json` to configure:
+
+| Parameter | Description |
+|-----------|-------------|
+| `containerMinReplicas` | `0` = scale-to-zero (cold starts), `1` = always-on |
+| `containerMaxReplicas` | Auto-scale limit (default: 10) |
+| `jwtSecret` | Generate with: `openssl rand -base64 32` |
+| `openaiApiKey` | Optional AI provider API key |
+
+### Useful Commands
+
+```bash
+# View logs
+az containerapp logs show --name ilmred-prod-api --resource-group ilmred-prod-rg --follow
+
+# Restart app
+az containerapp revision restart --name ilmred-prod-api --resource-group ilmred-prod-rg
+
+# Scale replicas
+az containerapp update --name ilmred-prod-api --resource-group ilmred-prod-rg --min-replicas 2
+
+# Delete all resources
+az group delete --name ilmred-prod-rg --yes
 ```
 
 ## Project Structure

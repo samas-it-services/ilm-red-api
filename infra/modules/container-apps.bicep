@@ -28,6 +28,16 @@ param environmentVariables array = []
 @description('Secrets for the container')
 param secrets array = []
 
+@description('Minimum number of container replicas (0 = scale to zero, 1+ = always on)')
+@minValue(0)
+@maxValue(10)
+param minReplicas int = 1
+
+@description('Maximum number of container replicas for auto-scaling')
+@minValue(1)
+@maxValue(30)
+param maxReplicas int = 10
+
 // Log Analytics Workspace (required for Container Apps)
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: '${environmentName}-logs'
@@ -143,8 +153,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
       ]
       scale: {
-        minReplicas: 0  // Scale to zero when idle!
-        maxReplicas: 10
+        minReplicas: minReplicas  // Configurable via parameters.json
+        maxReplicas: maxReplicas
         rules: [
           {
             name: 'http-scaling'

@@ -58,6 +58,16 @@ param xaiApiKey string = ''
 @secure()
 param deepseekApiKey string = ''
 
+@description('Minimum number of container replicas (0 = scale to zero, 1+ = always on)')
+@minValue(0)
+@maxValue(10)
+param containerMinReplicas int = 1
+
+@description('Maximum number of container replicas for auto-scaling')
+@minValue(1)
+@maxValue(30)
+param containerMaxReplicas int = 10
+
 // ============================================================================
 // VARIABLES
 // ============================================================================
@@ -149,6 +159,8 @@ module containerApps 'modules/container-apps.bicep' = {
     tags: tags
     acrLoginServer: acr.outputs.loginServer
     acrName: acr.outputs.name
+    minReplicas: containerMinReplicas
+    maxReplicas: containerMaxReplicas
     // Environment variables
     environmentVariables: [
       { name: 'ENVIRONMENT', value: 'production' }

@@ -4,9 +4,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Version** | 1.0.0 |
-| **Last Updated** | January 2025 |
-| **Status** | Draft |
+| **Version** | 2.0.0 |
+| **Last Updated** | January 2026 |
+| **Status** | Active |
 | **Related PRD** | [PRD.md](./PRD.md) |
 | **Architecture** | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 
@@ -1985,139 +1985,209 @@ export default function () {
 
 ---
 
-## 8. Deployment
+## 8. Deployment & Operations
 
-### 8.1 Container Configuration
+### 8.1 Infrastructure Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Azure Container Apps                          │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  ilmred-prod-api (0.5 vCPU, 1GB RAM)                        ││
+│  │  - Auto-scales 1-10 replicas based on HTTP load             ││
+│  │  - Health probes: /v1/health (liveness + readiness)         ││
+│  └─────────────────────────────────────────────────────────────┘│
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  PostgreSQL   │    │   Redis Cache    │    │ Azure Blob      │
+│  (Flexible)   │    │   (Basic C0)     │    │ Storage         │
+│  Burstable B1 │    │   250MB          │    │ Hot tier        │
+└───────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+### 8.2 Deployment Script
+
+The deployment is handled by `scripts/deploy-azure.sh`:
+
+```bash
+# Full deployment (infrastructure + app)
+./scripts/deploy-azure.sh prod
+
+# Infrastructure only (Bicep templates)
+./scripts/deploy-azure.sh prod --infra-only
+
+# App only (Docker build + push + update)
+./scripts/deploy-azure.sh prod --app-only
+
+# Skip Docker build (push existing image)
+./scripts/deploy-azure.sh prod --app-only --skip-build
+```
+
+**Deployment Flow:**
+1. Check prerequisites (Azure CLI, Docker, login)
+2. Create resource group (`ilmred-prod-rg`)
+3. Deploy Bicep templates (`infra/main.bicep`)
+4. Build Docker image (`docker/Dockerfile`)
+5. Push to Azure Container Registry
+6. Update Container App with new image
+7. Verify health endpoint (`/v1/health`)
+
+### 8.3 Infrastructure as Code (Bicep)
+
+```
+infra/
+├── main.bicep              # Main template (orchestrates modules)
+├── parameters.json         # Environment-specific values
+├── parameters.example.json # Template for parameters
+└── modules/
+    ├── container-apps.bicep     # Container Apps Environment + App
+    ├── container-registry.bicep # Azure Container Registry
+    ├── postgresql.bicep         # PostgreSQL Flexible Server
+    ├── redis.bicep              # Azure Cache for Redis
+    ├── storage.bicep            # Azure Blob Storage
+    └── keyvault.bicep           # Azure Key Vault
+```
+
+### 8.4 Container Configuration
 
 ```dockerfile
-# Dockerfile
-FROM node:20-alpine AS builder
+# docker/Dockerfile - Multi-stage Python build
+FROM python:3.12-slim AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
+RUN pip install poetry==2.2.1
+COPY pyproject.toml poetry.lock* ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-root --only main
 
-FROM node:20-alpine
+FROM python:3.12-slim
 WORKDIR /app
-RUN addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-USER nodejs
-EXPOSE 3000
-CMD ["node", "dist/main.js"]
+RUN useradd --create-home appuser
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --chown=appuser:appuser app ./app/
+COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
+USER appuser
+EXPOSE 8000
+HEALTHCHECK --interval=30s CMD curl -f http://localhost:8000/v1/health
+ENTRYPOINT ["/app/entrypoint.sh"]
 ```
 
-### 8.2 Azure Container Apps Configuration
+**Entrypoint Flow** (`docker/entrypoint.sh`):
+1. Run Alembic migrations (`alembic upgrade head`)
+2. Start Uvicorn (`uvicorn app.main:app --host 0.0.0.0 --port 8000`)
 
-```yaml
-# container-app.yaml
-name: books-service
-configuration:
-  activeRevisionsMode: Multiple
-  ingress:
-    external: true
-    targetPort: 3000
-    transport: http
-    traffic:
-      - revisionName: books-service--v1
-        weight: 90
-      - revisionName: books-service--v2
-        weight: 10
-  secrets:
-    - name: cosmos-connection
-      value: secretref:cosmos-connection
-    - name: redis-connection
-      value: secretref:redis-connection
-template:
-  containers:
-    - name: books-service
-      image: ilmred.azurecr.io/books-service:latest
-      resources:
-        cpu: 0.5
-        memory: 1Gi
-      env:
-        - name: NODE_ENV
-          value: production
-        - name: COSMOS_CONNECTION
-          secretRef: cosmos-connection
-      probes:
-        liveness:
-          httpGet:
-            path: /health
-            port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 10
-        readiness:
-          httpGet:
-            path: /ready
-            port: 3000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-  scale:
-    minReplicas: 2
-    maxReplicas: 100
-    rules:
-      - name: http-rule
-        http:
-          metadata:
-            concurrentRequests: "100"
+### 8.5 Scaling Configuration
+
+Edit `infra/parameters.json`:
+
+```json
+{
+  "containerMinReplicas": { "value": 1 },
+  "containerMaxReplicas": { "value": 10 }
+}
 ```
 
-### 8.3 CI/CD Pipeline
+**Scaling Rules** (in `modules/container-apps.bicep`):
+- HTTP-based: Scale up when concurrent requests > 50
+- Min replicas: Configurable (0-10)
+- Max replicas: Configurable (1-30)
 
-```yaml
-# .github/workflows/deploy.yaml
-name: Deploy to Azure
+| Setting | Behavior | Cost Impact |
+|---------|----------|-------------|
+| `minReplicas: 0` | Scale to zero when idle | ~$0 when idle, 20-30s cold starts |
+| `minReplicas: 1` | Always-on | +$23/mo, no cold starts |
+| `minReplicas: 2` | High availability | +$46/mo, HA |
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+### 8.6 Environment Variables
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:unit
-      - run: npm run test:integration
+Configured in `infra/main.bicep` → `containerApps` module:
 
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/docker-login@v1
-        with:
-          login-server: ilmred.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-      - run: |
-          docker build -t ilmred.azurecr.io/books-service:${{ github.sha }} .
-          docker push ilmred.azurecr.io/books-service:${{ github.sha }}
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `DATABASE_URL` | PostgreSQL module | Connection string |
+| `REDIS_URL` | Redis module | Connection string |
+| `JWT_SECRET` | parameters.json (secret) | Auth signing key |
+| `STORAGE_TYPE` | Hardcoded: `azure` | Use Azure Blob |
+| `OPENAI_API_KEY` | parameters.json (secret) | AI provider |
+| `ENVIRONMENT` | Hardcoded: `production` | App mode |
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - uses: azure/container-apps-deploy-action@v1
-        with:
-          resourceGroup: ilm-red-prod
-          containerAppName: books-service
-          imageToDeploy: ilmred.azurecr.io/books-service:${{ github.sha }}
+### 8.7 Monitoring & Troubleshooting
+
+```bash
+# View container logs (real-time)
+az containerapp logs show \
+  --name ilmred-prod-api \
+  --resource-group ilmred-prod-rg \
+  --follow
+
+# Check revision status
+az containerapp revision list \
+  --name ilmred-prod-api \
+  --resource-group ilmred-prod-rg \
+  -o table
+
+# Get app health state
+az containerapp show \
+  --name ilmred-prod-api \
+  --resource-group ilmred-prod-rg \
+  --query "{revision:properties.latestRevisionName,health:properties.latestReadyRevisionName}"
+
+# Execute command in container
+az containerapp exec \
+  --name ilmred-prod-api \
+  --resource-group ilmred-prod-rg \
+  --command "alembic current"
 ```
+
+### 8.8 Cost Management
+
+**Monthly Cost Breakdown (Always-On):**
+
+| Resource | SKU | Cost |
+|----------|-----|------|
+| Container Apps | 0.5 vCPU, 1GB × 24h × 30d | ~$23 |
+| PostgreSQL | Burstable B1ms | ~$15 |
+| Redis | Basic C0 (250MB) | ~$16 |
+| Container Registry | Basic | ~$5 |
+| Storage | Hot tier, minimal usage | ~$1 |
+| Key Vault | Standard | ~$0.03 |
+| **Total** | | **~$60/mo** |
+
+**Cost Optimization:**
+- Set `containerMinReplicas: 0` for dev/staging (scale-to-zero)
+- Use `containerMinReplicas: 1` for production (eliminate cold starts)
+- PostgreSQL and Redis are fixed costs regardless of traffic
+
+### 8.9 Disaster Recovery
+
+**Backup:**
+- PostgreSQL: Automatic backups (7 days retention, local redundancy)
+- Redis: Volatile cache (no persistence, can be rebuilt)
+- Storage: Azure Blob with local redundancy
+
+**Recovery:**
+```bash
+# Redeploy from scratch
+./scripts/deploy-azure.sh prod
+
+# Restore database (if needed)
+az postgres flexible-server backup restore \
+  --resource-group ilmred-prod-rg \
+  --name ilmred-prod-postgres \
+  --restore-time "2024-01-15T10:30:00Z"
+```
+
+### 8.10 Security Checklist
+
+- [ ] API keys stored in Key Vault (not in code)
+- [ ] JWT secret generated securely (`openssl rand -base64 32`)
+- [ ] CORS configured for production domains
+- [ ] PostgreSQL firewall allows only Azure services
+- [ ] Container runs as non-root user (`appuser`)
+- [ ] HTTPS enforced (TLS termination at Container Apps)
 
 ---
 
@@ -2214,7 +2284,1429 @@ sdk.start();
 
 ---
 
-## 10. Appendices
+## 10. Chat System Design
+
+### 10.1 Overview
+
+The chat system provides persistent multi-turn conversations with AI about books, supporting both synchronous and streaming responses.
+
+### 10.2 Data Models
+
+#### 10.2.1 ChatSession
+
+```sql
+-- PostgreSQL Table: chat_sessions
+CREATE TABLE chat_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    book_id UUID REFERENCES books(id) ON DELETE SET NULL,  -- Optional book context
+    title VARCHAR(200) NOT NULL,                           -- Auto-generated or user-provided
+    message_count INTEGER NOT NULL DEFAULT 0,              -- Denormalized for performance
+    last_model VARCHAR(50),                                -- Last model used
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    archived_at TIMESTAMPTZ                                -- NULL = active
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_chat_sessions_user_archived_updated
+    ON chat_sessions(user_id, archived_at, updated_at DESC);
+CREATE INDEX idx_chat_sessions_book
+    ON chat_sessions(book_id) WHERE book_id IS NOT NULL;
+```
+
+```typescript
+interface ChatSession {
+  id: string;                    // UUID v4
+  userId: string;                // FK to users
+  bookId?: string;               // Optional book context
+  title: string;                 // Session name
+  messageCount: number;          // Denormalized count
+  lastModel?: string;            // Last model used
+  createdAt: Date;
+  updatedAt: Date;
+  archivedAt?: Date;             // Soft delete
+}
+```
+
+#### 10.2.2 ChatMessage
+
+```sql
+-- PostgreSQL Table: chat_messages
+CREATE TABLE chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    tokens_input INTEGER,         -- NULL for user messages
+    tokens_output INTEGER,        -- NULL for user messages
+    cost_cents INTEGER,           -- NULL for user messages
+    model VARCHAR(50),            -- NULL for user messages
+    finish_reason VARCHAR(20),    -- 'stop', 'length', 'content_filter'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for message retrieval
+CREATE INDEX idx_chat_messages_session_created
+    ON chat_messages(session_id, created_at ASC);
+```
+
+```typescript
+interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  tokensInput?: number;          // Input tokens (assistant only)
+  tokensOutput?: number;         // Output tokens (assistant only)
+  costCents?: number;            // Cost in cents (assistant only)
+  model?: string;                // Model used (assistant only)
+  finishReason?: string;         // Completion reason
+  createdAt: Date;
+}
+```
+
+#### 10.2.3 MessageFeedback
+
+```sql
+-- PostgreSQL Table: message_feedback
+CREATE TABLE message_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating SMALLINT NOT NULL CHECK (rating IN (-1, 1)),  -- thumbs down/up
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(message_id, user_id)
+);
+```
+
+### 10.3 SSE Streaming Protocol
+
+#### 10.3.1 Endpoint Specification
+
+```
+Endpoint: POST /v1/chats/{session_id}/stream
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+#### 10.3.2 Event Types
+
+```
+# Content chunk (partial response)
+event: chunk
+data: {"content": "Chapter"}
+
+event: chunk
+data: {"content": " 3 discusses"}
+
+# Token count update (mid-stream)
+event: tokens
+data: {"input": 50, "output": 25}
+
+# Stream complete
+event: done
+data: {"finish_reason": "stop", "message_id": "uuid", "total_tokens": 75, "cost_cents": 1}
+
+# Error during stream
+event: error
+data: {"code": "RATE_LIMITED", "message": "Rate limit exceeded. Retry after 60 seconds."}
+```
+
+#### 10.3.3 Client Implementation (React Native)
+
+```typescript
+const streamChat = async (sessionId: string, message: string, onChunk: (text: string) => void) => {
+  const response = await fetch(`${API_URL}/v1/chats/${sessionId}/stream`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ content: message }),
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = JSON.parse(line.slice(6));
+        if (data.content) {
+          onChunk(data.content);
+        }
+        if (data.finish_reason) {
+          return data; // Return final metadata
+        }
+      }
+    }
+  }
+};
+```
+
+### 10.4 Chat Service Implementation
+
+```python
+# app/services/chat_service.py
+class ChatService:
+    async def create_session(
+        self,
+        user_id: UUID,
+        book_id: Optional[UUID] = None,
+        title: Optional[str] = None
+    ) -> ChatSession:
+        """Create a new chat session."""
+        session = ChatSession(
+            id=uuid4(),
+            user_id=user_id,
+            book_id=book_id,
+            title=title or self._generate_title(book_id),
+            message_count=0,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        return await self.repo.create(session)
+
+    async def send_message(
+        self,
+        session_id: UUID,
+        content: str,
+        model: Optional[str] = None
+    ) -> ChatMessage:
+        """Send a message and get AI response (non-streaming)."""
+        session = await self.repo.get_session(session_id)
+
+        # Check billing
+        await self.billing_service.check_balance(session.user_id)
+        await self.billing_service.check_limits(session.user_id)
+
+        # Safety check input
+        safety_result = await self.safety_service.check_input(content)
+        if safety_result.severity == Severity.HIGH:
+            raise ContentBlockedError(safety_result.categories)
+
+        # Save user message
+        user_message = await self._save_message(session_id, 'user', content)
+
+        # Get context from book if available
+        context = []
+        if session.book_id:
+            context = await self._get_book_context(session.book_id, content)
+
+        # Select model
+        selected_model = await self.router.select_model(
+            content,
+            await self.user_service.get(session.user_id),
+            explicit_model=model
+        )
+
+        # Get message history
+        history = await self.repo.get_messages(session_id, limit=20)
+
+        # Call AI provider
+        ai_response = await self.ai_service.chat(
+            model=selected_model,
+            messages=self._build_messages(history, context, content),
+            stream=False
+        )
+
+        # Safety check output
+        output_safety = await self.safety_service.check_output(ai_response.content)
+        final_content = self._apply_safety_filter(ai_response.content, output_safety)
+
+        # Calculate cost
+        cost_cents = self._calculate_cost(
+            selected_model,
+            ai_response.tokens_input,
+            ai_response.tokens_output
+        )
+
+        # Save assistant message
+        assistant_message = await self._save_message(
+            session_id=session_id,
+            role='assistant',
+            content=final_content,
+            tokens_input=ai_response.tokens_input,
+            tokens_output=ai_response.tokens_output,
+            cost_cents=cost_cents,
+            model=selected_model,
+            finish_reason=ai_response.finish_reason
+        )
+
+        # Record billing transaction
+        await self.billing_service.record_transaction(
+            user_id=session.user_id,
+            operation_type='chat',
+            operation_id=assistant_message.id,
+            model=selected_model,
+            tokens_input=ai_response.tokens_input,
+            tokens_output=ai_response.tokens_output,
+            cost_cents=cost_cents
+        )
+
+        # Update session
+        await self.repo.update_session(session_id, {
+            'message_count': session.message_count + 2,
+            'last_model': selected_model,
+            'updated_at': datetime.utcnow()
+        })
+
+        return assistant_message
+
+    async def stream_message(
+        self,
+        session_id: UUID,
+        content: str,
+        model: Optional[str] = None
+    ) -> AsyncGenerator[dict, None]:
+        """Send a message and stream AI response via SSE."""
+        session = await self.repo.get_session(session_id)
+
+        # Pre-checks (billing, safety)
+        await self.billing_service.check_balance(session.user_id)
+        safety_result = await self.safety_service.check_input(content)
+        if safety_result.severity == Severity.HIGH:
+            yield {'type': 'error', 'code': 'CONTENT_BLOCKED', 'message': 'Content policy violation'}
+            return
+
+        # Save user message
+        await self._save_message(session_id, 'user', content)
+
+        # Select model and build context
+        selected_model = await self.router.select_model(content, session.user_id, model)
+        context = await self._get_book_context(session.book_id, content) if session.book_id else []
+        history = await self.repo.get_messages(session_id, limit=20)
+
+        # Stream from AI provider
+        full_content = ""
+        tokens_input = 0
+        tokens_output = 0
+
+        async for chunk in self.ai_service.chat_stream(
+            model=selected_model,
+            messages=self._build_messages(history, context, content)
+        ):
+            if chunk.type == 'content':
+                full_content += chunk.content
+                yield {'type': 'chunk', 'content': chunk.content}
+            elif chunk.type == 'usage':
+                tokens_input = chunk.input
+                tokens_output = chunk.output
+                yield {'type': 'tokens', 'input': tokens_input, 'output': tokens_output}
+
+        # Calculate cost and save message
+        cost_cents = self._calculate_cost(selected_model, tokens_input, tokens_output)
+        message = await self._save_message(
+            session_id, 'assistant', full_content,
+            tokens_input=tokens_input, tokens_output=tokens_output,
+            cost_cents=cost_cents, model=selected_model, finish_reason='stop'
+        )
+
+        # Record billing
+        await self.billing_service.record_transaction(
+            user_id=session.user_id,
+            operation_type='chat',
+            operation_id=message.id,
+            model=selected_model,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            cost_cents=cost_cents
+        )
+
+        yield {
+            'type': 'done',
+            'finish_reason': 'stop',
+            'message_id': str(message.id),
+            'total_tokens': tokens_input + tokens_output,
+            'cost_cents': cost_cents
+        }
+```
+
+---
+
+## 11. Billing System Design
+
+### 11.1 Overview
+
+The billing system tracks AI usage at a granular level, manages credit balances, and enforces usage limits.
+
+### 11.2 Data Models
+
+#### 11.2.1 UserCredits
+
+```sql
+-- PostgreSQL Table: user_credits
+CREATE TABLE user_credits (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    balance_cents INTEGER NOT NULL DEFAULT 0,
+    lifetime_usage_cents INTEGER NOT NULL DEFAULT 0,
+    free_credits_remaining INTEGER NOT NULL DEFAULT 100,  -- $1.00 for free tier
+    free_credits_reset_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month'),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+```typescript
+interface UserCredits {
+  userId: string;
+  balanceCents: number;           // Current balance in cents
+  lifetimeUsageCents: number;     // Total ever used
+  freeCreditsRemaining: number;   // Monthly free allocation
+  freeCreditsResetAt: Date;       // Next reset date
+  updatedAt: Date;
+}
+```
+
+#### 11.2.2 BillingTransaction
+
+```sql
+-- PostgreSQL Table: billing_transactions
+CREATE TABLE billing_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    operation_type VARCHAR(20) NOT NULL CHECK (operation_type IN ('chat', 'summary', 'search', 'embedding')),
+    operation_id UUID,                 -- Reference to specific message/operation
+    model VARCHAR(50) NOT NULL,
+    tokens_input INTEGER NOT NULL,
+    tokens_output INTEGER NOT NULL,
+    cost_cents INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for billing queries
+CREATE INDEX idx_billing_transactions_user_created
+    ON billing_transactions(user_id, created_at DESC);
+```
+
+```typescript
+interface BillingTransaction {
+  id: string;
+  userId: string;
+  operationType: 'chat' | 'summary' | 'search' | 'embedding';
+  operationId?: string;           // Reference to chat_message, etc.
+  model: string;
+  tokensInput: number;
+  tokensOutput: number;
+  costCents: number;
+  createdAt: Date;
+}
+```
+
+#### 11.2.3 UsageLimit
+
+```sql
+-- PostgreSQL Table: usage_limits
+CREATE TABLE usage_limits (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    daily_tokens_limit INTEGER NOT NULL DEFAULT 10000,
+    daily_tokens_used INTEGER NOT NULL DEFAULT 0,
+    daily_reset_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 day'),
+    monthly_cost_limit_cents INTEGER NOT NULL DEFAULT 100,  -- $1.00
+    monthly_cost_used_cents INTEGER NOT NULL DEFAULT 0,
+    monthly_reset_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month')
+);
+```
+
+### 11.3 Transaction Recording Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     AI Chat Request                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  1. BillingService.check_balance(user_id)                   │
+│     - Get user_credits.balance_cents + free_credits         │
+│     - If total < estimated_cost → HTTP 402 Payment Required │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. BillingService.check_limits(user_id)                    │
+│     - Check daily_tokens_used < daily_tokens_limit          │
+│     - Check monthly_cost_used < monthly_cost_limit          │
+│     - If exceeded → HTTP 429 with X-RateLimit-Reset         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. Execute AI Call                                         │
+│     - SafetyService.check_input(message)                    │
+│     - AIProvider.chat(messages)                             │
+│     - SafetyService.check_output(response)                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  4. BillingService.record_transaction(                      │
+│       user_id, operation_type, model,                       │
+│       tokens_input, tokens_output, cost_cents               │
+│     )                                                       │
+│     - INSERT INTO billing_transactions                      │
+│     - Deduct from free_credits first, then balance          │
+│     - UPDATE usage_limits SET used += tokens/cost           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. Return Response with cost metadata                      │
+│     { "content": "...", "tokens": 75, "cost_cents": 1 }     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 11.4 Cost Calculation
+
+```python
+# app/services/billing_service.py
+from app.ai import MODEL_REGISTRY
+
+def calculate_cost_cents(model: str, tokens_input: int, tokens_output: int) -> int:
+    """Calculate cost in cents for an AI operation."""
+    model_config = MODEL_REGISTRY.get(model)
+    if not model_config:
+        raise ValueError(f"Unknown model: {model}")
+
+    # Costs are per 1M tokens, stored as USD
+    input_cost = (tokens_input / 1_000_000) * model_config.input_cost_per_1m
+    output_cost = (tokens_output / 1_000_000) * model_config.output_cost_per_1m
+
+    total_usd = input_cost + output_cost
+    total_cents = int(total_usd * 100)
+
+    # Minimum charge: 1 cent (except for free tier operations)
+    return max(total_cents, 1)
+```
+
+### 11.5 Billing Service Implementation
+
+```python
+# app/services/billing_service.py
+class BillingService:
+    async def check_balance(self, user_id: UUID) -> None:
+        """Check if user has sufficient balance. Raises PaymentRequiredError if not."""
+        credits = await self.repo.get_credits(user_id)
+        total_available = credits.balance_cents + credits.free_credits_remaining
+
+        if total_available < 1:  # Minimum 1 cent needed
+            raise PaymentRequiredError(
+                "Insufficient credits. Please top up your account.",
+                balance_cents=credits.balance_cents,
+                free_remaining=credits.free_credits_remaining
+            )
+
+    async def check_limits(self, user_id: UUID) -> LimitStatus:
+        """Check usage limits. Returns status with warnings or raises error."""
+        limits = await self.repo.get_limits(user_id)
+        now = datetime.utcnow()
+
+        # Reset if needed
+        if limits.daily_reset_at < now:
+            limits = await self.repo.reset_daily_limits(user_id)
+        if limits.monthly_reset_at < now:
+            limits = await self.repo.reset_monthly_limits(user_id)
+
+        # Check daily tokens
+        daily_pct = limits.daily_tokens_used / limits.daily_tokens_limit
+        if daily_pct >= 1.0:
+            raise RateLimitedError(
+                "Daily token limit exceeded",
+                reset_at=limits.daily_reset_at
+            )
+
+        # Check monthly cost
+        monthly_pct = limits.monthly_cost_used_cents / limits.monthly_cost_limit_cents
+        if monthly_pct >= 1.0:
+            raise RateLimitedError(
+                "Monthly cost limit exceeded",
+                reset_at=limits.monthly_reset_at
+            )
+
+        # Return warning status
+        return LimitStatus(
+            daily_warning=daily_pct >= 0.8,
+            monthly_warning=monthly_pct >= 0.8,
+            daily_remaining=limits.daily_tokens_limit - limits.daily_tokens_used,
+            monthly_remaining_cents=limits.monthly_cost_limit_cents - limits.monthly_cost_used_cents
+        )
+
+    async def record_transaction(
+        self,
+        user_id: UUID,
+        operation_type: str,
+        operation_id: Optional[UUID],
+        model: str,
+        tokens_input: int,
+        tokens_output: int,
+        cost_cents: int
+    ) -> BillingTransaction:
+        """Record a billing transaction and update balances."""
+        async with self.db.transaction():
+            # Create transaction record
+            transaction = BillingTransaction(
+                id=uuid4(),
+                user_id=user_id,
+                operation_type=operation_type,
+                operation_id=operation_id,
+                model=model,
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
+                cost_cents=cost_cents,
+                created_at=datetime.utcnow()
+            )
+            await self.repo.create_transaction(transaction)
+
+            # Deduct from credits (free first, then balance)
+            credits = await self.repo.get_credits(user_id)
+            if credits.free_credits_remaining >= cost_cents:
+                await self.repo.update_credits(user_id, {
+                    'free_credits_remaining': credits.free_credits_remaining - cost_cents
+                })
+            else:
+                free_used = credits.free_credits_remaining
+                balance_used = cost_cents - free_used
+                await self.repo.update_credits(user_id, {
+                    'free_credits_remaining': 0,
+                    'balance_cents': credits.balance_cents - balance_used,
+                    'lifetime_usage_cents': credits.lifetime_usage_cents + cost_cents
+                })
+
+            # Update limits
+            total_tokens = tokens_input + tokens_output
+            await self.repo.increment_limits(user_id, total_tokens, cost_cents)
+
+            return transaction
+
+    async def get_balance(self, user_id: UUID) -> BalanceResponse:
+        """Get current balance for API response."""
+        credits = await self.repo.get_credits(user_id)
+        return BalanceResponse(
+            balance_cents=credits.balance_cents,
+            free_credits_remaining=credits.free_credits_remaining,
+            free_credits_reset_at=credits.free_credits_reset_at,
+            total_available=credits.balance_cents + credits.free_credits_remaining
+        )
+
+    async def get_usage_summary(
+        self,
+        user_id: UUID,
+        period: str = 'month'
+    ) -> UsageSummary:
+        """Get usage summary for a period."""
+        start_date = self._get_period_start(period)
+        transactions = await self.repo.get_transactions(
+            user_id,
+            since=start_date
+        )
+
+        return UsageSummary(
+            period=period,
+            start_date=start_date,
+            total_cost_cents=sum(t.cost_cents for t in transactions),
+            total_tokens=sum(t.tokens_input + t.tokens_output for t in transactions),
+            transaction_count=len(transactions),
+            by_operation={
+                op: sum(t.cost_cents for t in transactions if t.operation_type == op)
+                for op in ['chat', 'summary', 'search', 'embedding']
+            },
+            by_model={
+                model: sum(t.cost_cents for t in transactions if t.model == model)
+                for model in set(t.model for t in transactions)
+            }
+        )
+```
+
+---
+
+## 12. AI Safety System Design
+
+### 12.1 Overview
+
+The AI Safety system protects users from harmful content in both input (user messages) and output (AI responses).
+
+### 12.2 Content Safety Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    User Message                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  SafetyService.check_input(message, user_strictness)        │
+│                                                             │
+│  1. Call OpenAI Moderation API (primary)                    │
+│     - Categories: hate, violence, sexual, self-harm         │
+│  2. Fallback: Keyword filtering (if API unavailable)        │
+│  3. Return SafetyResult(flagged, categories, severity)      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │  Severity?      │
+                    └─────────────────┘
+                    /       |        \
+                HIGH     MEDIUM      LOW/NONE
+                  │         │           │
+                  ▼         ▼           ▼
+             ┌────────┐ ┌────────┐ ┌────────┐
+             │ Block  │ │ Warn + │ │Continue│
+             │ + Log  │ │ Allow  │ │        │
+             └────────┘ └────────┘ └────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Generation                            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  SafetyService.check_output(response, user_strictness)      │
+│                                                             │
+│  1. Same moderation check as input                          │
+│  2. If flagged: redact/filter sensitive content             │
+│  3. Log for review if severity >= MEDIUM                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                Return to User                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 12.3 Safety Categories
+
+| Category | Description | Examples |
+|----------|-------------|----------|
+| `hate` | Hate speech, discrimination | Slurs, stereotypes, dehumanization |
+| `violence` | Violent content, threats | Graphic violence, threats of harm |
+| `sexual` | Sexual content, explicit material | Explicit descriptions, NSFW content |
+| `self_harm` | Self-harm, suicide content | Instructions for self-injury |
+| `illegal` | Illegal activities | Fraud, hacking, drug manufacturing |
+
+### 12.4 Strictness Levels
+
+| Level | HIGH Threshold | MEDIUM Threshold | Behavior |
+|-------|----------------|------------------|----------|
+| `strict` | 0.3 | 0.1 | Block most flagged content |
+| `moderate` | 0.6 | 0.3 | Allow borderline, block clear violations |
+| `minimal` | 0.9 | 0.7 | Only block severe violations |
+
+### 12.5 Safety Service Implementation
+
+```python
+# app/services/safety_service.py
+from enum import Enum
+from dataclasses import dataclass
+from typing import List, Optional
+import httpx
+
+class Severity(str, Enum):
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+class SafetyCategory(str, Enum):
+    HATE = "hate"
+    VIOLENCE = "violence"
+    SEXUAL = "sexual"
+    SELF_HARM = "self_harm"
+    ILLEGAL = "illegal"
+
+@dataclass
+class SafetyResult:
+    flagged: bool
+    categories: List[SafetyCategory]
+    severity: Severity
+    scores: dict[str, float]
+    message: Optional[str] = None
+
+class SafetyService:
+    STRICTNESS_THRESHOLDS = {
+        "strict": {"high": 0.3, "medium": 0.1},
+        "moderate": {"high": 0.6, "medium": 0.3},
+        "minimal": {"high": 0.9, "medium": 0.7},
+    }
+
+    async def check_input(
+        self,
+        content: str,
+        strictness: str = "moderate"
+    ) -> SafetyResult:
+        """Check user input for safety violations."""
+        try:
+            result = await self._call_moderation_api(content)
+        except Exception as e:
+            # Fallback to keyword filtering
+            result = self._keyword_filter(content)
+
+        return self._apply_strictness(result, strictness)
+
+    async def check_output(
+        self,
+        content: str,
+        strictness: str = "moderate"
+    ) -> SafetyResult:
+        """Check AI output for safety violations."""
+        result = await self.check_input(content, strictness)
+
+        # Log flagged outputs for review
+        if result.severity in [Severity.MEDIUM, Severity.HIGH]:
+            await self._log_flagged_content(content, result, "output")
+
+        return result
+
+    async def _call_moderation_api(self, content: str) -> SafetyResult:
+        """Call OpenAI Moderation API."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/moderations",
+                headers={"Authorization": f"Bearer {self.openai_key}"},
+                json={"input": content}
+            )
+            data = response.json()
+
+            result = data["results"][0]
+            categories = []
+            scores = {}
+
+            # Map OpenAI categories to our categories
+            category_mapping = {
+                "hate": SafetyCategory.HATE,
+                "violence": SafetyCategory.VIOLENCE,
+                "sexual": SafetyCategory.SEXUAL,
+                "self-harm": SafetyCategory.SELF_HARM,
+            }
+
+            for oai_cat, our_cat in category_mapping.items():
+                if result["categories"].get(oai_cat):
+                    categories.append(our_cat)
+                scores[our_cat.value] = result["category_scores"].get(oai_cat, 0)
+
+            return SafetyResult(
+                flagged=result["flagged"],
+                categories=categories,
+                severity=Severity.NONE,  # Will be set by _apply_strictness
+                scores=scores
+            )
+
+    def _apply_strictness(
+        self,
+        result: SafetyResult,
+        strictness: str
+    ) -> SafetyResult:
+        """Apply strictness thresholds to determine severity."""
+        thresholds = self.STRICTNESS_THRESHOLDS.get(strictness, self.STRICTNESS_THRESHOLDS["moderate"])
+
+        max_score = max(result.scores.values()) if result.scores else 0
+
+        if max_score >= thresholds["high"]:
+            severity = Severity.HIGH
+            message = "Content blocked due to policy violation"
+        elif max_score >= thresholds["medium"]:
+            severity = Severity.MEDIUM
+            message = "Content flagged for review"
+        elif result.flagged:
+            severity = Severity.LOW
+            message = None
+        else:
+            severity = Severity.NONE
+            message = None
+
+        return SafetyResult(
+            flagged=result.flagged,
+            categories=result.categories,
+            severity=severity,
+            scores=result.scores,
+            message=message
+        )
+
+    def _keyword_filter(self, content: str) -> SafetyResult:
+        """Fallback keyword-based filtering."""
+        # Simple keyword matching as fallback
+        # In production, use a more sophisticated approach
+        flagged = False
+        categories = []
+        scores = {cat.value: 0.0 for cat in SafetyCategory}
+
+        # Example patterns (would be more comprehensive in production)
+        patterns = {
+            SafetyCategory.VIOLENCE: ["kill", "murder", "attack"],
+            SafetyCategory.HATE: ["slur_placeholder"],
+            # ... more patterns
+        }
+
+        content_lower = content.lower()
+        for category, keywords in patterns.items():
+            for keyword in keywords:
+                if keyword in content_lower:
+                    flagged = True
+                    categories.append(category)
+                    scores[category.value] = 0.9
+                    break
+
+        return SafetyResult(
+            flagged=flagged,
+            categories=categories,
+            severity=Severity.NONE,
+            scores=scores
+        )
+
+    async def _log_flagged_content(
+        self,
+        content: str,
+        result: SafetyResult,
+        direction: str
+    ) -> None:
+        """Log flagged content for manual review."""
+        await self.repo.create_safety_flag(
+            content=content[:500],  # Truncate for storage
+            direction=direction,
+            categories=result.categories,
+            severity=result.severity,
+            scores=result.scores
+        )
+```
+
+---
+
+## 13. Smart LLM Router Design
+
+### 13.1 Overview
+
+The Smart LLM Router automatically selects the optimal model based on task type, user tier, and cost optimization.
+
+### 13.2 Task Classification
+
+```python
+# app/ai/task_classifier.py
+from enum import Enum
+
+class TaskType(str, Enum):
+    SUMMARY = "summary"      # Summarize, condense, TLDR
+    REASONING = "reasoning"  # Analyze, explain why, compare
+    CREATIVE = "creative"    # Write, compose, generate story
+    CODE = "code"            # Write code, debug, refactor
+    GENERAL = "general"      # Default for unclassified
+
+def classify_task(message: str) -> TaskType:
+    """Classify user message into task type using keyword matching + heuristics."""
+    message_lower = message.lower()
+
+    # Summary keywords
+    if any(kw in message_lower for kw in ['summarize', 'summary', 'tldr', 'condense', 'brief', 'shorten']):
+        return TaskType.SUMMARY
+
+    # Code keywords
+    if any(kw in message_lower for kw in ['code', 'function', 'implement', 'debug', 'fix bug', 'refactor', 'python', 'javascript']):
+        return TaskType.CODE
+
+    # Creative keywords
+    if any(kw in message_lower for kw in ['write', 'compose', 'create', 'story', 'poem', 'creative', 'imagine']):
+        return TaskType.CREATIVE
+
+    # Reasoning keywords
+    if any(kw in message_lower for kw in ['analyze', 'explain', 'why', 'compare', 'difference', 'reason', 'think']):
+        return TaskType.REASONING
+
+    return TaskType.GENERAL
+```
+
+### 13.3 Model Selection Matrix
+
+```python
+# app/ai/model_router.py
+
+MODEL_SELECTION_MATRIX = {
+    # (task_type, user_tier) → model_id
+    (TaskType.SUMMARY, "free"): "qwen-turbo",
+    (TaskType.SUMMARY, "premium"): "qwen-turbo",      # Still cheapest
+
+    (TaskType.REASONING, "free"): "gpt-4o-mini",
+    (TaskType.REASONING, "premium"): "gpt-4o",
+
+    (TaskType.CREATIVE, "free"): "claude-3-haiku",
+    (TaskType.CREATIVE, "premium"): "claude-3-sonnet",
+
+    (TaskType.CODE, "free"): "deepseek-chat",
+    (TaskType.CODE, "premium"): "deepseek-coder",
+
+    (TaskType.GENERAL, "free"): "qwen-turbo",
+    (TaskType.GENERAL, "premium"): "gpt-4o-mini",
+}
+
+FALLBACK_CHAINS = {
+    "openai": ["anthropic", "qwen", "deepseek"],
+    "anthropic": ["openai", "qwen", "deepseek"],
+    "qwen": ["deepseek", "openai", "anthropic"],
+    "deepseek": ["qwen", "openai", "anthropic"],
+    "google": ["openai", "anthropic", "qwen"],
+    "xai": ["openai", "anthropic", "qwen"],
+}
+```
+
+### 13.4 Router Implementation
+
+```python
+# app/services/ai_model_router.py
+from app.ai import MODEL_REGISTRY
+from app.ai.task_classifier import classify_task, TaskType
+
+class AIModelRouter:
+    async def select_model(
+        self,
+        message: str,
+        user: User,
+        explicit_model: Optional[str] = None,
+        book: Optional[Book] = None,
+    ) -> str:
+        """Select optimal model for the request."""
+
+        # 1. User explicit override takes precedence
+        if explicit_model:
+            if explicit_model not in MODEL_REGISTRY:
+                raise ModelNotFoundError(explicit_model)
+            if not await self._check_model_available(explicit_model):
+                raise ModelNotAvailableError(explicit_model)
+            if self._is_premium_model(explicit_model) and not user.is_premium:
+                raise PremiumRequiredError(explicit_model)
+            return explicit_model
+
+        # 2. Check user's default preference
+        if user.preferences and user.preferences.ai and user.preferences.ai.default_model:
+            default = user.preferences.ai.default_model
+            if await self._check_model_available(default):
+                return default
+
+        # 3. Classify task and select from matrix
+        task_type = classify_task(message)
+        tier = "premium" if user.is_premium else "free"
+
+        # Book visibility affects model selection for cost
+        if book and book.visibility == "public" and task_type == TaskType.GENERAL:
+            # Use cheapest model for public book queries
+            selected = "qwen-turbo"
+        else:
+            selected = MODEL_SELECTION_MATRIX.get((task_type, tier), "qwen-turbo")
+
+        # 4. Check availability with fallback
+        if not await self._check_model_available(selected):
+            selected = await self._get_fallback(selected, tier)
+
+        return selected
+
+    async def _check_model_available(self, model_id: str) -> bool:
+        """Check if model is currently available and healthy."""
+        model_config = MODEL_REGISTRY.get(model_id)
+        if not model_config:
+            return False
+
+        # Check provider health cache
+        cache_key = f"provider_health:{model_config.vendor}"
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Ping provider
+        try:
+            provider = self._get_provider(model_config.vendor)
+            await provider.health_check()
+            await self.cache.set(cache_key, True, ttl=60)
+            return True
+        except Exception:
+            await self.cache.set(cache_key, False, ttl=30)
+            return False
+
+    async def _get_fallback(self, model_id: str, tier: str) -> str:
+        """Get fallback model when primary is unavailable."""
+        model_config = MODEL_REGISTRY.get(model_id)
+        if not model_config:
+            raise AllModelsUnavailableError()
+
+        vendor = model_config.vendor
+        fallback_vendors = FALLBACK_CHAINS.get(vendor, [])
+
+        for fallback_vendor in fallback_vendors:
+            fallback_model = self._get_default_for_vendor(fallback_vendor, tier)
+            if await self._check_model_available(fallback_model):
+                return fallback_model
+
+        raise AllModelsUnavailableError()
+
+    def _get_default_for_vendor(self, vendor: str, tier: str) -> str:
+        """Get default model for a vendor based on tier."""
+        vendor_defaults = {
+            ("openai", "free"): "gpt-4o-mini",
+            ("openai", "premium"): "gpt-4o",
+            ("anthropic", "free"): "claude-3-haiku",
+            ("anthropic", "premium"): "claude-3-sonnet",
+            ("qwen", "free"): "qwen-turbo",
+            ("qwen", "premium"): "qwen-plus",
+            ("deepseek", "free"): "deepseek-chat",
+            ("deepseek", "premium"): "deepseek-coder",
+            ("google", "free"): "gemini-1.5-flash",
+            ("google", "premium"): "gemini-1.5-pro",
+            ("xai", "free"): "grok-beta",
+            ("xai", "premium"): "grok-beta",
+        }
+        return vendor_defaults.get((vendor, tier), "qwen-turbo")
+
+    def _is_premium_model(self, model_id: str) -> bool:
+        """Check if model requires premium tier."""
+        premium_models = {
+            "gpt-4o", "gpt-4-turbo", "o1-preview", "o1-mini",
+            "claude-3-opus", "claude-3-5-sonnet",
+            "gemini-1.5-pro",
+            "qwen-max",
+        }
+        return model_id in premium_models
+
+    async def estimate_cost(
+        self,
+        model_id: str,
+        estimated_input_tokens: int,
+        estimated_output_tokens: int
+    ) -> CostEstimate:
+        """Estimate cost for an operation before execution."""
+        model_config = MODEL_REGISTRY.get(model_id)
+        if not model_config:
+            raise ModelNotFoundError(model_id)
+
+        input_cost = (estimated_input_tokens / 1_000_000) * model_config.input_cost_per_1m
+        output_cost = (estimated_output_tokens / 1_000_000) * model_config.output_cost_per_1m
+        total_usd = input_cost + output_cost
+        total_cents = max(int(total_usd * 100), 1)
+
+        return CostEstimate(
+            model=model_id,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
+            estimated_cost_cents=total_cents,
+            model_input_cost_per_1m=model_config.input_cost_per_1m,
+            model_output_cost_per_1m=model_config.output_cost_per_1m
+        )
+
+    def get_available_models(self, user: User) -> List[ModelInfo]:
+        """Get list of models available to user based on tier."""
+        models = []
+        for model_id, config in MODEL_REGISTRY.items():
+            is_premium = self._is_premium_model(model_id)
+            if is_premium and not user.is_premium:
+                continue
+
+            models.append(ModelInfo(
+                id=model_id,
+                name=config.name,
+                vendor=config.vendor,
+                context_window=config.context_window,
+                input_cost_per_1m=config.input_cost_per_1m,
+                output_cost_per_1m=config.output_cost_per_1m,
+                supports_streaming=config.supports_streaming,
+                tier="premium" if is_premium else "free"
+            ))
+
+        return sorted(models, key=lambda m: m.input_cost_per_1m)
+```
+
+---
+
+## 14. Mobile Integration Guide
+
+### 14.1 Authentication
+
+#### 14.1.1 Token Storage
+- **iOS**: Keychain Services (encrypted)
+- **Android**: EncryptedSharedPreferences
+
+#### 14.1.2 Token Refresh Strategy
+
+```typescript
+// React Native - Axios interceptor for automatic token refresh
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Queue the request while refreshing
+        return new Promise((resolve) => {
+          refreshSubscribers.push((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api.request(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = await AsyncStorage.getItem('refresh_token');
+        const response = await api.post('/v1/auth/refresh', { refresh_token: refreshToken });
+        const { access_token, refresh_token: newRefreshToken } = response.data;
+
+        await AsyncStorage.setItem('access_token', access_token);
+        await AsyncStorage.setItem('refresh_token', newRefreshToken);
+
+        // Notify queued requests
+        refreshSubscribers.forEach((callback) => callback(access_token));
+        refreshSubscribers = [];
+
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        return api.request(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed - redirect to login
+        await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
+        // Navigate to login screen
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
+### 14.2 Caching Strategy
+
+```typescript
+// React Query configuration for mobile
+import { QueryClient } from '@tanstack/react-query';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,      // 5 minutes
+      gcTime: 30 * 60 * 1000,        // 30 minutes (formerly cacheTime)
+      retry: 3,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+      networkMode: 'offlineFirst',   // Use cached data when offline
+    },
+  },
+});
+
+// Persist cache to AsyncStorage
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'REACT_QUERY_OFFLINE_CACHE',
+});
+
+// Cache strategies by data type
+const CACHE_CONFIG = {
+  // User profile - cache longer, doesn't change often
+  user: { staleTime: 10 * 60 * 1000, gcTime: 60 * 60 * 1000 },
+
+  // Book list - moderate caching
+  books: { staleTime: 5 * 60 * 1000, gcTime: 30 * 60 * 1000 },
+
+  // Chat sessions - shorter cache, more dynamic
+  chats: { staleTime: 1 * 60 * 1000, gcTime: 10 * 60 * 1000 },
+
+  // Billing - always fresh
+  billing: { staleTime: 0, gcTime: 5 * 60 * 1000 },
+};
+```
+
+### 14.3 Error Handling
+
+| HTTP Code | Meaning | Mobile Action |
+|-----------|---------|---------------|
+| 401 | Token expired | Auto-refresh token |
+| 402 | Insufficient credits | Show top-up prompt with balance |
+| 403 | Forbidden | Show permission error with support link |
+| 404 | Not found | Show "not found" UI, clear cache |
+| 422 | Validation error | Show field-specific error messages |
+| 429 | Rate limited | Show retry countdown timer |
+| 500 | Server error | Retry with exponential backoff |
+| Network error | Offline | Queue for later, show offline indicator |
+
+```typescript
+// Centralized error handler
+const handleApiError = (error: AxiosError) => {
+  const status = error.response?.status;
+  const data = error.response?.data as any;
+
+  switch (status) {
+    case 402:
+      // Show credit top-up modal
+      showModal('TopUpCredits', {
+        balance: data.balance_cents,
+        required: data.required_cents,
+      });
+      break;
+
+    case 429:
+      // Show rate limit countdown
+      const resetAt = new Date(data.reset_at);
+      const secondsRemaining = Math.ceil((resetAt.getTime() - Date.now()) / 1000);
+      showToast(`Rate limited. Try again in ${secondsRemaining}s`);
+      break;
+
+    case 500:
+      // Log to error tracking
+      Sentry.captureException(error);
+      showToast('Server error. Please try again.');
+      break;
+
+    default:
+      if (!error.response) {
+        // Network error
+        showToast('No internet connection');
+      }
+  }
+};
+```
+
+### 14.4 Offline Support
+
+```typescript
+// Offline mutation queue
+import NetInfo from '@react-native-community/netinfo';
+
+class OfflineQueue {
+  private queue: Array<{
+    mutation: () => Promise<any>;
+    timestamp: number;
+  }> = [];
+
+  async add(mutation: () => Promise<any>) {
+    const netState = await NetInfo.fetch();
+
+    if (netState.isConnected) {
+      return mutation();
+    }
+
+    this.queue.push({ mutation, timestamp: Date.now() });
+    await this.persistQueue();
+    showToast('Saved offline. Will sync when connected.');
+  }
+
+  async processQueue() {
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected || this.queue.length === 0) return;
+
+    const mutations = [...this.queue];
+    this.queue = [];
+
+    for (const { mutation } of mutations) {
+      try {
+        await mutation();
+      } catch (error) {
+        // Re-queue failed mutations
+        this.queue.push({ mutation, timestamp: Date.now() });
+      }
+    }
+
+    await this.persistQueue();
+  }
+
+  private async persistQueue() {
+    await AsyncStorage.setItem('offline_queue', JSON.stringify(
+      this.queue.map(({ timestamp }) => ({ timestamp }))
+    ));
+  }
+}
+
+// Listen for connectivity changes
+NetInfo.addEventListener((state) => {
+  if (state.isConnected) {
+    offlineQueue.processQueue();
+  }
+});
+```
+
+### 14.5 Image Loading Strategy
+
+```typescript
+// Adaptive image resolution based on device and network
+import { Dimensions, PixelRatio } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+
+type Resolution = 'thumbnail' | 'medium' | 'highRes' | 'ultra';
+
+const getOptimalResolution = async (): Promise<Resolution> => {
+  const screenWidth = Dimensions.get('window').width;
+  const pixelRatio = PixelRatio.get();
+  const effectiveWidth = screenWidth * pixelRatio;
+
+  const netInfo = await NetInfo.fetch();
+  const isSlowConnection = netInfo.type === 'cellular' &&
+    netInfo.details?.cellularGeneration !== '4g';
+
+  // On slow connections, use lower resolution
+  if (isSlowConnection) {
+    return effectiveWidth > 400 ? 'medium' : 'thumbnail';
+  }
+
+  // Based on effective screen width
+  if (effectiveWidth <= 150) return 'thumbnail';
+  if (effectiveWidth <= 800) return 'medium';
+  if (effectiveWidth <= 1600) return 'highRes';
+  return 'ultra';
+};
+
+// Image component with progressive loading
+const AdaptiveImage: React.FC<{ pageUrls: Record<Resolution, string> }> = ({ pageUrls }) => {
+  const [currentRes, setCurrentRes] = useState<Resolution>('thumbnail');
+
+  useEffect(() => {
+    // Load thumbnail immediately
+    Image.prefetch(pageUrls.thumbnail);
+
+    // Then load optimal resolution
+    getOptimalResolution().then((optimal) => {
+      if (optimal !== 'thumbnail') {
+        Image.prefetch(pageUrls[optimal]).then(() => {
+          setCurrentRes(optimal);
+        });
+      }
+    });
+  }, [pageUrls]);
+
+  return (
+    <Image
+      source={{ uri: pageUrls[currentRes] }}
+      style={styles.pageImage}
+      resizeMode="contain"
+    />
+  );
+};
+```
+
+### 14.6 Performance Targets
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| App cold start | < 2 seconds | Time to interactive |
+| App warm start | < 500ms | Time to previous state |
+| API response (p95) | < 500ms | Server response time |
+| Image load (cached) | < 200ms | From disk to display |
+| Image load (network) | < 2 seconds | From request to display |
+| Memory usage | < 200MB | Active memory footprint |
+| Battery drain | < 5%/hour active | During active reading |
+
+---
+
+## 15. Appendices
 
 ### A. Error Codes
 

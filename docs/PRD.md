@@ -4,9 +4,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Version** | 1.0.0 |
-| **Last Updated** | January 2025 |
-| **Status** | Draft |
+| **Version** | 2.0.0 |
+| **Last Updated** | January 2026 |
+| **Status** | Active |
 | **Owner** | ILM Red Team |
 
 ---
@@ -404,6 +404,151 @@ POST /v1/ai/billing/purchase      Purchase credits (Stripe)
 - Track usage per model per user
 - Support credit limits and alerts
 
+#### FR-AI-010: Chat Session Management
+**Priority:** High
+**Description:** Persistent multi-turn conversations with context awareness.
+
+**Acceptance Criteria:**
+- Create, list, update, delete chat sessions
+- Sessions linked to books (optional) for context-aware chat
+- Session metadata: title, message count, last activity
+- Archive/soft delete support
+- Session continuity across devices
+
+**API Endpoints:**
+```
+POST   /v1/chats              Create new chat session
+GET    /v1/chats              List user's chat sessions
+GET    /v1/chats/{id}         Get session with messages
+PUT    /v1/chats/{id}         Update session (rename/archive)
+DELETE /v1/chats/{id}         Delete session
+```
+
+#### FR-AI-011: Message Storage & Retrieval
+**Priority:** High
+**Description:** Store full conversation history with metadata.
+
+**Acceptance Criteria:**
+- Store all messages with role (user/assistant/system)
+- Track tokens used, model used, cost per message
+- Pagination for long conversations (default: 50 messages)
+- Message timestamps in UTC
+- Finish reason tracking (stop, length, content_filter)
+
+**API Endpoints:**
+```
+POST /v1/chats/{id}/messages       Send message (non-streaming)
+GET  /v1/chats/{id}/messages       Get messages with pagination
+```
+
+#### FR-AI-012: Streaming Chat (SSE)
+**Priority:** High
+**Description:** Real-time token streaming for responsive chat experience.
+
+**Acceptance Criteria:**
+- Server-Sent Events (SSE) endpoint
+- Chunk-by-chunk delivery as AI generates
+- Token count updates during stream
+- Graceful handling of disconnections
+- Final message with total tokens and cost
+- Typing indicator support
+
+**API Endpoint:**
+```
+POST /v1/chats/{id}/stream         Streaming chat (SSE)
+```
+
+**SSE Event Format:**
+```
+data: {"type": "chunk", "content": "Hello"}
+data: {"type": "tokens", "input": 50, "output": 10}
+data: {"type": "done", "finish_reason": "stop", "message_id": "uuid", "cost_cents": 2}
+```
+
+#### FR-AI-013: Rate Limiting
+**Priority:** High
+**Description:** Fair usage limits per tier.
+
+**Acceptance Criteria:**
+
+| Tier | Requests/min | Tokens/day |
+|------|--------------|------------|
+| Free | 60 | 10,000 |
+| Premium | 300 | 100,000 |
+| Enterprise | 1000 | 10,000,000 |
+
+- Clear error messages when limits exceeded
+- Headers: X-RateLimit-Remaining, X-RateLimit-Reset
+- Soft warning at 80% usage
+
+#### FR-AI-014: AI Safety & Content Moderation
+**Priority:** High
+**Description:** Protect users from harmful content.
+
+**Acceptance Criteria:**
+- Pre-screen user messages before sending to AI
+- Post-filter AI responses before returning to user
+- Categories: hate, violence, sexual, self_harm, illegal
+- Severity levels: HIGH (block), MEDIUM (warn), LOW (log)
+- Configurable strictness per user preference
+- Log flagged content for review
+
+**Safety Flow:**
+1. User sends message
+2. SafetyService.check_input(message) → pass/flag
+3. If flagged HIGH → return error (HTTP 400)
+4. If flagged MEDIUM → warn user, allow with flag
+5. AI generates response
+6. SafetyService.check_output(response) → pass/flag
+7. If flagged → redact or block
+8. Return to user
+
+#### FR-AI-015: AI Response Evaluation
+**Priority:** Medium
+**Description:** Track and improve AI response quality.
+
+**Acceptance Criteria:**
+- Latency tracking: time to first token, total time
+- Token efficiency: output/input ratio
+- User feedback: thumbs up/down per message
+- Response quality metrics in analytics
+- A/B testing support for model comparisons
+
+**API Endpoint:**
+```
+POST /v1/chats/{id}/messages/{msg_id}/feedback
+{
+  "rating": 1,  // 1 = thumbs up, -1 = thumbs down
+  "comment": "Very helpful explanation"
+}
+```
+
+#### FR-AI-016: Smart LLM Router (Cost Optimization)
+**Priority:** High
+**Description:** Automatically select cost-effective models based on task type.
+
+**Acceptance Criteria:**
+- Task classification from message content
+- Task types: summary, reasoning, creative, code, general
+- Model selection matrix based on task + user tier
+- User can override with explicit model choice
+- Fallback chain if primary model unavailable
+- Cost vs quality trade-off configurable
+
+**Model Selection Matrix:**
+
+| Task | Free Tier | Premium Tier |
+|------|-----------|--------------|
+| summary | qwen-turbo ($0.40/1M) | qwen-turbo |
+| reasoning | gpt-4o-mini ($0.75/1M) | gpt-4o ($10/1M) |
+| creative | claude-3-haiku ($0.80/1M) | claude-3-sonnet ($15/1M) |
+| code | deepseek-chat ($0.55/1M) | deepseek-coder ($1.10/1M) |
+| general | qwen-turbo | gpt-4o-mini |
+
+**Fallback Chains:**
+- OpenAI unavailable → Anthropic → Qwen → DeepSeek
+- Cost-sensitive: Qwen → DeepSeek → GPT-4o-mini
+
 ### 4.6 Book Clubs API
 
 #### FR-CLUB-001: Club Management
@@ -742,6 +887,187 @@ Emit events for page generation lifecycle:
 - `book.pages.generation.completed` - All pages extracted
 - `book.pages.generation.failed` - Critical failure occurred
 - `book.cover.updated` - Cover changed (auto or custom)
+
+### 4.12 Billing & Credits API
+
+#### FR-BILL-001: Credit System
+**Priority:** High
+**Description:** Users have credit balance for AI operations.
+
+**Acceptance Criteria:**
+- Balance stored in USD cents (integer, avoids floating point issues)
+- Credits deducted per AI operation
+- Free tier: $1.00 monthly free credits (100 cents)
+- Premium tier: $10.00 monthly free credits (1000 cents)
+- Top-up via payment gateway (future phase)
+- Zero balance blocks AI operations (HTTP 402 Payment Required)
+
+#### FR-BILL-002: Granular Usage Tracking
+**Priority:** High
+**Description:** Track every AI operation for billing transparency.
+
+**Acceptance Criteria:**
+- Record per operation:
+  - Timestamp
+  - Operation type (chat, summary, search, embedding)
+  - Model used
+  - Tokens (input + output)
+  - Cost in cents
+  - Reference to chat message/session
+- Aggregation by: day, week, month
+- Retention: 90 days detailed, 2 years aggregated
+
+#### FR-BILL-003: Transparent Billing API
+**Priority:** High
+**Description:** API for users to view their usage and billing.
+
+**API Endpoints:**
+```
+GET /v1/billing/balance                    Current credit balance
+GET /v1/billing/usage?period=day|week|month  Usage summary by period
+GET /v1/billing/transactions               List transactions (paginated)
+GET /v1/billing/transactions/{id}          Single transaction detail
+GET /v1/billing/limits                     Current usage limits
+```
+
+**Response Examples:**
+
+Balance:
+```json
+{
+  "balance_cents": 523,
+  "free_credits_remaining": 100,
+  "free_credits_reset_at": "2026-02-01T00:00:00Z",
+  "lifetime_usage_cents": 4500
+}
+```
+
+Transaction:
+```json
+{
+  "id": "txn_abc123",
+  "timestamp": "2026-01-09T15:30:00Z",
+  "operation_type": "chat",
+  "operation_id": "msg_xyz789",
+  "model": "gpt-4o-mini",
+  "tokens_input": 150,
+  "tokens_output": 200,
+  "cost_cents": 1,
+  "session_id": "sess_abc"
+}
+```
+
+#### FR-BILL-004: Usage Limits & Enforcement
+**Priority:** High
+**Description:** Enforce usage limits to prevent abuse and manage costs.
+
+**Acceptance Criteria:**
+- Per-user daily token limit (configurable by tier)
+- Per-user monthly cost limit (configurable by tier)
+- Soft limit at 80%: Warning header in response
+- Hard limit at 100%: HTTP 402 Payment Required
+- Grace period for premium users (24 hours)
+- Clear error messages with upgrade prompts
+
+**Limit Defaults by Tier:**
+
+| Tier | Daily Tokens | Monthly Cost |
+|------|--------------|--------------|
+| Free | 10,000 | $1.00 |
+| Premium | 100,000 | $50.00 |
+| Enterprise | 10,000,000 | Custom |
+
+#### FR-BILL-005: Cost Transparency
+**Priority:** Medium
+**Description:** Users should always know the cost of operations.
+
+**Acceptance Criteria:**
+- Estimate cost before operation: `POST /v1/ai/estimate`
+- Actual cost returned in every AI response
+- Running total visible in chat interface (via response metadata)
+- Daily/weekly email summary (optional, user preference)
+- Cost breakdown by model in billing dashboard
+
+**Estimate API:**
+```
+POST /v1/ai/estimate
+{
+  "model": "gpt-4o-mini",
+  "input_tokens": 500,
+  "estimated_output_tokens": 200
+}
+```
+Response:
+```json
+{
+  "estimated_cost_cents": 1,
+  "model": "gpt-4o-mini",
+  "input_cost_per_1m": 0.15,
+  "output_cost_per_1m": 0.60
+}
+```
+
+### 4.13 Mobile Application Requirements
+
+#### MR-001: Offline-First Architecture
+**Priority:** High
+**Description:** Mobile app must function without network connectivity for core reading features.
+
+**Acceptance Criteria:**
+- Books can be downloaded for offline reading
+- Reading progress saved locally, synced when online
+- Offline queue for favorites, ratings, notes
+- Clear indication of offline vs online status
+- Graceful degradation for features requiring network (AI chat shows "offline" message)
+
+#### MR-002: Adaptive Image Resolution
+**Priority:** High
+**Description:** Automatically select optimal image resolution based on device and network conditions.
+
+**Acceptance Criteria:**
+- Resolution selection based on: device DPI, network speed, battery level
+- Options: thumbnail (150px), medium (800px), high-res (1600px), ultra (3200px)
+- Progressive loading: show lower res immediately, upgrade when available
+- Prefetch adjacent pages while reading (2 pages ahead)
+- Cache management to prevent storage bloat (configurable max cache size)
+
+#### MR-003: Background Sync
+**Priority:** Medium
+**Description:** Synchronize data in background without user intervention.
+
+**Acceptance Criteria:**
+- Reading progress syncs within 5 seconds when online
+- Push notifications for book clubs, friend activity
+- Background download of queued books
+- Battery-efficient sync scheduling (respect low power mode)
+
+#### MR-004: Performance Targets (Mobile)
+**Priority:** High
+**Description:** Mobile app must meet strict performance requirements.
+
+**Acceptance Criteria:**
+
+| Metric | Target |
+|--------|--------|
+| App cold start | < 2 seconds |
+| App warm start | < 500ms |
+| API response (p95) | < 500ms |
+| Image load (cached) | < 200ms |
+| Image load (network) | < 2 seconds |
+| Memory usage | < 200MB active |
+| Battery drain | < 5% per hour reading |
+
+#### MR-005: Mobile API Optimization
+**Priority:** High
+**Description:** API optimizations for mobile clients.
+
+**Acceptance Criteria:**
+- Response compression (gzip/brotli) for all responses > 1KB
+- Batch endpoints for reducing round trips
+- Incremental sync endpoints for efficient updates
+- HTTP/2 support for connection multiplexing
+- Retry-After headers for rate limit guidance
+- Request coalescing support
 
 ---
 

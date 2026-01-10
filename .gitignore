@@ -58,3 +58,9 @@ Thumbs.db
 
 # Ruff
 .ruff_cache/
+
+# Infrastructure secrets
+infra/parameters.json
+
+# Error logs
+errors*.txt

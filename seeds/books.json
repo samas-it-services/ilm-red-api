@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "title": "Sample Islamic Book",
+      "author": "Anonymous Scholar",
+      "description": "A sample book for testing the ILM Red platform.",
+      "category": "Other",
+      "language": "en",
+      "page_count": 100,
+      "file_size": 1048576
+    },
+    {
+      "title": "Introduction to Quran",
+      "author": "Test Author",
+      "description": "An introductory guide to understanding the Quran.",
+      "category": "Quran",
+      "language": "en",
+      "page_count": 200,
+      "file_size": 2097152
+    },
+    {
+      "title": "Hadith Collection",
+      "author": "Test Scholar",
+      "description": "A collection of authenticated hadith for study.",
+      "category": "Hadith",
+      "language": "ar",
+      "page_count": 500,
+      "file_size": 5242880
+    }
+  ],
+  "total": 3,
+  "page": 1,
+  "limit": 100,
+  "pages": 1
+}

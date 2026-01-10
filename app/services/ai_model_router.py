@@ -1,14 +1,17 @@
 """AI Model Router Service.
 
 This service handles intelligent model selection based on:
-1. Book visibility (public vs private)
-2. User preferences
-3. Tier access (free vs premium)
+1. Task type classification (summary, reasoning, creative, code, etc.)
+2. Book visibility (public vs private)
+3. User preferences
+4. Tier access (free vs premium)
+5. Model availability and fallback chains
 
 Model Routing Rules:
-- Public books: Use Qwen (cost-effective) by default
-- Private books: Use user's preferred model, or GPT-4o-mini if not set
-- User can always override by specifying model explicitly
+- Task-based: Different tasks benefit from different models
+- Public books: Use cost-effective models by default
+- Private books: Use user's preferred model, or better defaults
+- Fallback chains: If primary model fails, try alternatives
 """
 
 from uuid import UUID
@@ -25,10 +28,37 @@ from app.ai import (
     get_ai_provider,
     get_model_config,
 )
+from app.ai.task_classifier import (
+    TaskType,
+    classify_task,
+    get_recommended_model,
+    TASK_MODEL_RECOMMENDATIONS,
+)
 from app.models.book import Book
 from app.models.user import User
 
 logger = structlog.get_logger(__name__)
+
+
+# Fallback chains by vendor - if primary fails, try next in chain
+FALLBACK_CHAINS = {
+    "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+    "anthropic": ["claude-3-haiku", "claude-3-sonnet", "claude-3-opus"],
+    "qwen": ["qwen-turbo", "qwen-plus", "qwen-max"],
+    "google": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+    "deepseek": ["deepseek-chat", "deepseek-coder"],
+    "xai": ["grok-2", "grok-beta"],
+}
+
+# Cross-vendor fallback - if entire vendor fails
+VENDOR_FALLBACK_ORDER = [
+    "openai",
+    "anthropic",
+    "google",
+    "qwen",
+    "deepseek",
+    "xai",
+]
 
 
 class AIModelRouter:
@@ -285,6 +315,148 @@ class AIModelRouter:
         # Return cheapest
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
+
+    @staticmethod
+    def resolve_model_for_task(
+        message: str,
+        book: Book | None = None,
+        user: User | None = None,
+        requested_model: str | None = None,
+    ) -> tuple[str, TaskType]:
+        """Resolve model based on task type classification.
+
+        This is an enhanced version of resolve_model that considers
+        the type of task being performed.
+
+        Args:
+            message: User's message to classify
+            book: Optional book context
+            user: The authenticated user
+            requested_model: Explicitly requested model
+
+        Returns:
+            Tuple of (model_id, task_type)
+        """
+        # If user explicitly requested a model, use standard resolution
+        if requested_model:
+            model = AIModelRouter.resolve_model(book, user, requested_model)
+            classification = classify_task(message)
+            return model, classification.task_type
+
+        # Classify the task
+        classification = classify_task(message)
+        is_premium = user and "premium" in (user.roles or [])
+
+        logger.debug(
+            "task_classified",
+            task_type=classification.task_type.value,
+            confidence=classification.confidence,
+            keywords=classification.keywords_matched,
+        )
+
+        # Get recommended model for task
+        recommended = get_recommended_model(classification.task_type, is_premium)
+
+        # Check if user can access the recommended model
+        if AIModelRouter._user_can_access_model(user, recommended):
+            logger.debug(
+                "using_task_recommended_model",
+                model=recommended,
+                task_type=classification.task_type.value,
+            )
+            return recommended, classification.task_type
+
+        # Fall back to standard resolution
+        model = AIModelRouter.resolve_model(book, user, None)
+        return model, classification.task_type
+
+    @staticmethod
+    def get_fallback_models(model_id: str, user: User | None = None) -> list[str]:
+        """Get fallback models to try if primary fails.
+
+        Returns models in order of preference:
+        1. Same vendor fallbacks
+        2. Cross-vendor fallbacks
+
+        Args:
+            model_id: Primary model that failed
+            user: User (for access check)
+
+        Returns:
+            List of fallback model IDs
+        """
+        fallbacks = []
+
+        if model_id not in MODEL_REGISTRY:
+            return [DEFAULT_MODEL_PUBLIC]
+
+        config = get_model_config(model_id)
+        primary_vendor = config.vendor
+
+        # Same vendor fallbacks
+        vendor_chain = FALLBACK_CHAINS.get(primary_vendor, [])
+        found_primary = False
+        for m in vendor_chain:
+            if m == model_id:
+                found_primary = True
+                continue
+            if found_primary and AIModelRouter._user_can_access_model(user, m):
+                fallbacks.append(m)
+
+        # Cross-vendor fallbacks
+        for vendor in VENDOR_FALLBACK_ORDER:
+            if vendor == primary_vendor:
+                continue
+
+            # Get first accessible model from this vendor
+            vendor_models = FALLBACK_CHAINS.get(vendor, [])
+            for m in vendor_models:
+                if m not in fallbacks and AIModelRouter._user_can_access_model(user, m):
+                    fallbacks.append(m)
+                    break  # Only one per vendor for cross-vendor
+
+        logger.debug(
+            "fallback_chain_generated",
+            primary=model_id,
+            fallbacks=fallbacks,
+        )
+
+        return fallbacks
+
+    @staticmethod
+    def get_model_for_operation(
+        operation: str,
+        user: User | None = None,
+    ) -> str:
+        """Get recommended model for a specific operation type.
+
+        Args:
+            operation: Operation type (chat, summary, search, embedding, etc.)
+            user: User for access check
+
+        Returns:
+            Recommended model ID
+        """
+        # Map operations to task types
+        operation_to_task = {
+            "chat": TaskType.GENERAL,
+            "summary": TaskType.SUMMARY,
+            "search": TaskType.QA,
+            "embedding": TaskType.GENERAL,  # Embeddings use separate models
+            "flashcards": TaskType.SUMMARY,
+            "quiz": TaskType.QA,
+        }
+
+        task_type = operation_to_task.get(operation, TaskType.GENERAL)
+        is_premium = user and "premium" in (user.roles or [])
+
+        model = get_recommended_model(task_type, is_premium)
+
+        # Verify access
+        if AIModelRouter._user_can_access_model(user, model):
+            return model
+
+        return DEFAULT_MODEL_PUBLIC
 
 
 # Convenience function for direct use

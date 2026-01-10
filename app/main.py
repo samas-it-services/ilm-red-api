@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api.v1.router import api_router
 from app.db.session import init_db, close_db
+from app.cache.redis_client import RedisCache
 
 # Configure structured logging
 structlog.configure(
@@ -42,10 +43,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting ILM Red API", version=settings.app_version, env=settings.environment)
     await init_db()
 
+    # Initialize Redis (optional - continues if unavailable)
+    try:
+        await RedisCache.get_client()
+        logger.info("Redis cache initialized")
+    except Exception as e:
+        logger.warning("Redis unavailable, caching disabled", error=str(e))
+
     yield
 
     # Shutdown
     logger.info("Shutting down ILM Red API")
+
+    # Close Redis
+    try:
+        await RedisCache.close()
+    except Exception:
+        pass
+
     await close_db()
 
 
@@ -55,9 +70,9 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="Cloud-native API for digital knowledge management with AI-powered features",
-        docs_url="/docs" if not settings.is_production else None,
-        redoc_url="/redoc" if not settings.is_production else None,
-        openapi_url="/openapi.json" if not settings.is_production else None,
+        docs_url="/docs",  # Always enable Swagger UI
+        redoc_url="/redoc",  # Always enable ReDoc
+        openapi_url="/openapi.json",  # Always enable OpenAPI spec
         lifespan=lifespan,
     )
 

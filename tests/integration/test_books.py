@@ -1,12 +1,13 @@
 """Book endpoint tests."""
 
 import io
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from app.models.book import Book
+from app.models.user import User
 
 
 # Helper to create a fake PDF file

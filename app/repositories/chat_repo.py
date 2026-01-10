@@ -1,14 +1,14 @@
 """Chat repository for database operations."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.chat import ChatSession, ChatMessage, MessageFeedback
+from app.models.chat import ChatMessage, ChatSession, MessageFeedback
 
 
 class ChatRepository:
@@ -121,7 +121,7 @@ class ChatRepository:
         if title is not None:
             session.title = title
 
-        session.updated_at = datetime.now(timezone.utc)
+        session.updated_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(session)
         return session
@@ -138,7 +138,7 @@ class ChatRepository:
             .values(
                 message_count=ChatSession.message_count + 1,
                 last_model=model,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
         await self.db.execute(stmt)

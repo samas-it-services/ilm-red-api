@@ -1,7 +1,7 @@
 """User-related database models."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
@@ -134,7 +134,7 @@ class OAuthAccount(Base, UUIDMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
     )
 
@@ -176,7 +176,7 @@ class ApiKey(Base, UUIDMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
     )
 
@@ -201,7 +201,7 @@ class RefreshToken(Base, UUIDMixin):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -212,7 +212,7 @@ class RefreshToken(Base, UUIDMixin):
     @property
     def is_valid(self) -> bool:
         """Check if token is valid (not expired and not revoked)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return self.revoked_at is None and self.expires_at > now
 
     def __repr__(self) -> str:

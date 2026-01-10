@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.book import UserBrief
 from app.schemas.common import Pagination
 
-
 # Request Schemas
 
 

@@ -1,26 +1,27 @@
 """Chat service for AI conversation business logic."""
 
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai import (
+    DEFAULT_MODEL_PRIVATE,
+    DEFAULT_MODEL_PUBLIC,
+    FREE_TIER_MODELS,
+    MODEL_REGISTRY,
     AIProviderError,
-    ChatMessage as AIChatMessage,
-    ChatResponse,
     RateLimitError,
     get_model_config,
     get_provider_for_model,
-    MODEL_REGISTRY,
-    DEFAULT_MODEL_PUBLIC,
-    DEFAULT_MODEL_PRIVATE,
-    FREE_TIER_MODELS,
+)
+from app.ai import (
+    ChatMessage as AIChatMessage,
 )
 from app.models.book import Book
-from app.models.chat import ChatSession, ChatMessage
+from app.models.chat import ChatMessage, ChatSession
 from app.models.user import User
 from app.repositories.book_repo import BookRepository
 from app.repositories.chat_repo import ChatRepository
@@ -359,7 +360,7 @@ Be educational, supportive, and encouraging."""
         )
 
         # Save user message
-        user_message = await self.chat_repo.create_message(
+        await self.chat_repo.create_message(
             session_id=session_id,
             role="user",
             content=data.content,

@@ -1,13 +1,12 @@
 """Billing repository for database operations."""
 
 import uuid
-from datetime import datetime, timezone
-from typing import Literal
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.billing import UserCredits, BillingTransaction, UsageLimit
+from app.models.billing import BillingTransaction, UsageLimit, UserCredits
 
 
 class BillingRepository:
@@ -46,7 +45,7 @@ class BillingRepository:
         if free_credits_remaining is not None:
             credits.free_credits_remaining = free_credits_remaining
 
-        credits.updated_at = datetime.now(timezone.utc)
+        credits.updated_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(credits)
         return credits
@@ -308,7 +307,7 @@ class BillingRepository:
         if monthly_cost_limit_cents is not None:
             limits.monthly_cost_limit_cents = monthly_cost_limit_cents
 
-        limits.updated_at = datetime.now(timezone.utc)
+        limits.updated_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(limits)
         return limits
@@ -345,7 +344,7 @@ class BillingRepository:
             Updated usage limits
         """
         limits = await self.get_or_create_limits(user_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Check daily reset
         if limits.daily_reset_at is None or (

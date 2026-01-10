@@ -1,7 +1,7 @@
 """Safety-related database models."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -18,8 +18,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.chat import ChatMessage, ChatSession
     from app.models.user import User
-    from app.models.chat import ChatSession, ChatMessage
 
 
 class SafetyFlag(Base):
@@ -88,7 +88,7 @@ class SafetyFlag(Base):
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
         nullable=False,
     )

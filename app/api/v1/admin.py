@@ -4,32 +4,30 @@ All endpoints require admin or super_admin role.
 """
 
 from uuid import UUID
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.models.user import User
-from app.models.book import Book
-from app.models.chat import ChatSession, ChatMessage
 from app.api.v1.deps import AdminUser
-from app.repositories.user_repo import UserRepository
+from app.db.session import get_db
+from app.models.book import Book
+from app.models.chat import ChatMessage, ChatSession
+from app.models.user import User
 from app.repositories.book_repo import BookRepository
+from app.repositories.user_repo import UserRepository
 from app.schemas.admin import (
+    AdminBookResponse,
+    AdminChatMessageResponse,
+    AdminChatSessionDetailResponse,
+    AdminChatSessionResponse,
     AdminUserResponse,
     AdminUserUpdate,
-    AdminUserListParams,
-    AdminBookResponse,
-    AdminBookListParams,
     BookProcessingRequest,
     BookProcessingResponse,
-    AdminChatSessionResponse,
-    AdminChatSessionDetailResponse,
-    AdminChatMessageResponse,
-    AdminChatListParams,
-    SystemStatsResponse,
     PaginatedResponse,
+    SystemStatsResponse,
 )
 
 router = APIRouter()
@@ -674,7 +672,7 @@ async def get_stats(
     # Book stats
     total_books = await db.scalar(select(func.count()).select_from(Book)) or 0
     public_books = await db.scalar(
-        select(func.count()).select_from(Book).where(Book.is_public == True)
+        select(func.count()).select_from(Book).where(Book.is_public is True)
     ) or 0
     private_books = total_books - public_books
     books_with_pages = await db.scalar(

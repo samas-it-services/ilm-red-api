@@ -1,35 +1,33 @@
 """Authentication endpoints."""
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import CurrentUser
 from app.config import settings
-from app.db.session import get_db
-from app.models.user import User
-from app.repositories.user_repo import UserRepository
+from app.core.exceptions import ConflictError, UnauthorizedError
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     generate_api_key,
     hash_password,
     verify_password,
-    verify_refresh_token_hash,
 )
-from app.core.exceptions import ConflictError, UnauthorizedError
+from app.db.session import get_db
+from app.repositories.user_repo import UserRepository
 from app.schemas.auth import (
+    ApiKeyCreate,
+    ApiKeyCreatedResponse,
+    ApiKeyResponse,
     LoginRequest,
+    RefreshRequest,
     RegisterRequest,
     TokenResponse,
-    RefreshRequest,
-    ApiKeyCreate,
-    ApiKeyResponse,
-    ApiKeyCreatedResponse,
 )
-from app.api.v1.deps import CurrentUser
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -95,7 +93,7 @@ async def register(
     access_token = create_access_token(subject=str(user.id))
 
     raw_refresh, refresh_hash = create_refresh_token(subject=str(user.id))
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days)
+    expires_at = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
     await user_repo.create_refresh_token(user.id, refresh_hash, expires_at)
 
     return TokenResponse(
@@ -161,7 +159,7 @@ async def login(
     access_token = create_access_token(subject=str(user.id))
 
     raw_refresh, refresh_hash = create_refresh_token(subject=str(user.id))
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days)
+    expires_at = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
     await user_repo.create_refresh_token(user.id, refresh_hash, expires_at)
 
     return TokenResponse(
@@ -225,7 +223,7 @@ async def refresh_token(
     access_token = create_access_token(subject=str(user.id))
 
     raw_refresh, refresh_hash = create_refresh_token(subject=str(user.id))
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days)
+    expires_at = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
     await user_repo.create_refresh_token(user.id, refresh_hash, expires_at)
 
     return TokenResponse(
@@ -338,7 +336,7 @@ async def create_api_key(
     # Calculate expiration
     expires_at = None
     if data.expires_in_days:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_in_days)
+        expires_at = datetime.now(UTC) + timedelta(days=data.expires_in_days)
 
     # Create the key
     api_key = await user_repo.create_api_key(

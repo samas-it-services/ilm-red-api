@@ -1,12 +1,12 @@
 """User repository for database operations."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, RefreshToken, ApiKey
+from app.models.user import ApiKey, RefreshToken, User
 
 
 class UserRepository:
@@ -63,14 +63,14 @@ class UserRepository:
             if hasattr(user, key):
                 setattr(user, key, value)
 
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(user)
         return user
 
     async def update_last_login(self, user: User) -> None:
         """Update user's last login timestamp."""
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.now(UTC)
         await self.db.flush()
 
     # Refresh Token operations
@@ -98,7 +98,7 @@ class UserRepository:
 
     async def revoke_refresh_token(self, token: RefreshToken) -> None:
         """Revoke a refresh token."""
-        token.revoked_at = datetime.now(timezone.utc)
+        token.revoked_at = datetime.now(UTC)
         await self.db.flush()
 
     async def revoke_all_refresh_tokens(self, user_id: uuid.UUID) -> int:
@@ -111,7 +111,7 @@ class UserRepository:
         result = await self.db.execute(stmt)
         tokens = result.scalars().all()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for token in tokens:
             token.revoked_at = now
 

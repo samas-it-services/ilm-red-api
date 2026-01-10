@@ -6,8 +6,9 @@ Supports TTL, key prefixes, and automatic cache key generation.
 
 import hashlib
 import json
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import TypeVar
 
 import structlog
 

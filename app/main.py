@@ -1,20 +1,20 @@
 """FastAPI application entry point."""
 
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
-from app.config import settings
-from app.api.v1.router import api_router
-from app.db.session import init_db, close_db
-from app.cache.redis_client import RedisCache
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
+
+from app.api.v1.router import api_router
+from app.cache.redis_client import RedisCache
+from app.config import settings
+from app.db.session import close_db, init_db
 
 # Configure structured logging
 structlog.configure(

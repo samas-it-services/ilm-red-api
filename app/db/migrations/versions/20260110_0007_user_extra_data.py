@@ -9,10 +9,9 @@ profile fields without requiring schema changes. Fields like full_name, city,
 state_province, country, date_of_birth can be stored here.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
-
 
 # revision identifiers, used by Alembic
 revision = "20260110_0007"

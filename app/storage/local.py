@@ -2,7 +2,6 @@
 
 import hashlib
 import hmac
-import os
 import time
 from pathlib import Path
 from typing import BinaryIO

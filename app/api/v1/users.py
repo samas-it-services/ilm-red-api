@@ -4,10 +4,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import CurrentUser
 from app.db.session import get_db
 from app.repositories.user_repo import UserRepository
-from app.schemas.user import UserResponse, UserUpdate, PublicUserResponse
-from app.api.v1.deps import CurrentUser
+from app.schemas.user import PublicUserResponse, UserResponse, UserUpdate
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)

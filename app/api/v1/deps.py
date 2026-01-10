@@ -3,12 +3,12 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import verify_access_token, verify_api_key
 from app.db.session import get_db
 from app.models.user import User
-from app.core.security import verify_access_token, verify_api_key
 from app.repositories.user_repo import UserRepository
 
 # Security schemes

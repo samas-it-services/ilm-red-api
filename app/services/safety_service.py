@@ -6,7 +6,7 @@ the OpenAI Moderation API and custom rules.
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Literal
 
@@ -397,7 +397,7 @@ class SafetyService:
         Returns:
             Dictionary with violation counts by severity
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         stmt = (
             select(

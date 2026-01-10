@@ -1,21 +1,21 @@
 """Billing service for credit and usage management."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai import get_model_config, MODEL_REGISTRY
-from app.models.billing import UserCredits, BillingTransaction, UsageLimit
+from app.ai import MODEL_REGISTRY, get_model_config
+from app.models.billing import BillingTransaction, UsageLimit, UserCredits
 from app.models.user import User
 from app.repositories.billing_repo import BillingRepository
 from app.schemas.billing import (
-    CreditBalanceResponse,
     CostEstimateRequest,
     CostEstimateResponse,
+    CreditBalanceResponse,
     TransactionFilters,
     TransactionListResponse,
     TransactionResponse,
@@ -362,7 +362,7 @@ class BillingService:
         Returns:
             Usage summary response
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if period == "day":
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)

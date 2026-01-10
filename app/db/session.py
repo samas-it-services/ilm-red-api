@@ -1,6 +1,6 @@
 """Database session management with async SQLAlchemy."""
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

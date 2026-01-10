@@ -5,15 +5,16 @@ Falls back to PostgreSQL full-text search if Redis is unavailable.
 """
 
 from uuid import UUID
+
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, or_, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import OptionalUser
 from app.db.session import get_db
 from app.models.book import Book
-from app.api.v1.deps import OptionalUser
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -124,12 +125,12 @@ async def search_books(
     if current_user:
         # Authenticated: show public + own private books
         visibility_filter = or_(
-            Book.is_public == True,
+            Book.is_public is True,
             Book.owner_id == current_user.id,
         )
     else:
         # Unauthenticated: only public books
-        visibility_filter = Book.is_public == True
+        visibility_filter = Book.is_public is True
 
     # Combine filters
     filters = [text_filters, visibility_filter]
@@ -205,11 +206,11 @@ async def get_suggestions(
     # Visibility filter
     if current_user:
         visibility_filter = or_(
-            Book.is_public == True,
+            Book.is_public is True,
             Book.owner_id == current_user.id,
         )
     else:
-        visibility_filter = Book.is_public == True
+        visibility_filter = Book.is_public is True
 
     # Title suggestions
     title_query = (

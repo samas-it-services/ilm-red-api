@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query
 
 from app.api.v1.deps import CurrentUser, DBSession
 from app.schemas.billing import (

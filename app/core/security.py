@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from jose import JWTError, jwt
@@ -46,12 +46,12 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now(UTC) + expires_delta
 
     to_encode = {
         "sub": str(subject),
         "exp": expire,
-        "iat": datetime.now(timezone.utc),
+        "iat": datetime.now(UTC),
         "type": "access",
     }
 
@@ -165,7 +165,7 @@ async def verify_api_key(db: AsyncSession, api_key: str) -> User | None:
     stmt = (
         select(ApiKey)
         .where(ApiKey.key_prefix == key_prefix)
-        .where(ApiKey.expires_at.is_(None) | (ApiKey.expires_at > datetime.now(timezone.utc)))
+        .where(ApiKey.expires_at.is_(None) | (ApiKey.expires_at > datetime.now(UTC)))
     )
     result = await db.execute(stmt)
     api_key_record = result.scalar_one_or_none()
@@ -178,7 +178,7 @@ async def verify_api_key(db: AsyncSession, api_key: str) -> User | None:
         return None
 
     # Update last used timestamp
-    api_key_record.last_used_at = datetime.now(timezone.utc)
+    api_key_record.last_used_at = datetime.now(UTC)
 
     # Get and return the user
     stmt = select(User).where(User.id == api_key_record.user_id)

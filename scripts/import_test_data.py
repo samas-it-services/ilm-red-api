@@ -19,7 +19,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -143,8 +143,8 @@ async def import_books(session: AsyncSession) -> int:
                     "file_hash": item.get("file_hash") or f"hash_{uuid4().hex[:16]}",
                     "status": "ready",
                     "thumbnail_url": item.get("thumbnail_url"),
-                    "created_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
+                    "created_at": datetime.now(UTC),
+                    "updated_at": datetime.now(UTC),
                 },
             )
             imported += 1
@@ -191,8 +191,8 @@ async def create_test_user(session: AsyncSession) -> str:
                 "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$dummy$hash",  # Not valid, use /auth/register
                 "roles": ["user", "admin"],  # Admin for testing
                 "preferences": json.dumps({"theme": "light", "language": "en"}),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
             },
         )
         await session.commit()
@@ -235,7 +235,7 @@ async def initialize_billing(session: AsyncSession, user_id: str) -> None:
             """),
             {
                 "user_id": user_id,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             },
         )
 
@@ -272,7 +272,7 @@ async def main(clear: bool) -> int:
     Returns:
         Exit code (0 for success)
     """
-    print(f"\nILM Red API - Data Import")
+    print("\nILM Red API - Data Import")
     print(f"{'=' * 50}")
     print(f"Database: {DEFAULT_DATABASE_URL.split('@')[1] if '@' in DEFAULT_DATABASE_URL else 'local'}")
     print(f"Seeds: {SEEDS_DIR}")

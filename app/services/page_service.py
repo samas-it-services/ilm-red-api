@@ -10,11 +10,10 @@ Principle P3: API orchestrates, storage serves (no streaming through API).
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.book import Book
 from app.models.page import PageImage, TextChunk
 from app.repositories.page_repo import PageRepository
 from app.schemas.page import (
@@ -26,7 +25,7 @@ from app.schemas.page import (
 )
 from app.services.chunking_service import ChunkingService
 from app.services.embedding_service import EmbeddingProvider
-from app.services.pdf_processor import PDFProcessor, RESOLUTIONS
+from app.services.pdf_processor import PDFProcessor
 from app.storage.base import StorageProvider
 
 logger = logging.getLogger(__name__)
@@ -366,7 +365,7 @@ class PageService:
             for_download=False,
         )
 
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=MEDIUM_EXPIRES_IN)
+        expires_at = datetime.now(UTC) + timedelta(seconds=MEDIUM_EXPIRES_IN)
 
         return PageDetailResponse(
             page_number=page.page_number,

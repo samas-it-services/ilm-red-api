@@ -1,15 +1,14 @@
 """Book repository for database operations."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.book import Book, Rating, Favorite
-from app.models.user import User
+from app.models.book import Book, Favorite, Rating
 
 
 class BookRepository:
@@ -206,7 +205,7 @@ class BookRepository:
             if hasattr(book, key) and value is not None:
                 setattr(book, key, value)
 
-        book.updated_at = datetime.now(timezone.utc)
+        book.updated_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(book)
         return book
@@ -221,7 +220,7 @@ class BookRepository:
         """Update book processing status."""
         values: dict = {
             "status": status,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         if error_message is not None:
             values["processing_error"] = error_message
@@ -234,7 +233,7 @@ class BookRepository:
 
     async def soft_delete(self, book: Book) -> None:
         """Soft delete a book."""
-        book.deleted_at = datetime.now(timezone.utc)
+        book.deleted_at = datetime.now(UTC)
         await self.db.flush()
 
     async def update_stats(
@@ -269,7 +268,7 @@ class BookRepository:
             # Update existing rating
             existing.rating = rating_value
             existing.review = review
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await self.db.flush()
             await self.db.refresh(existing)
             rating = existing

@@ -5,9 +5,8 @@ Different task types benefit from different models - reasoning tasks need more c
 models while simple tasks can use cost-effective ones.
 """
 
-import re
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
 
 
 class TaskType(str, Enum):

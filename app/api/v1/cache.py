@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import get_current_user
-from app.cache.redis_client import RedisCache, CacheService
+from app.cache.redis_client import CacheService, RedisCache
 from app.models.user import User
 
 router = APIRouter()

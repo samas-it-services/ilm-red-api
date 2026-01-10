@@ -2,7 +2,7 @@
 
 import hashlib
 import uuid
-from typing import BinaryIO, Literal
+from typing import Literal
 
 import structlog
 from fastapi import HTTPException, UploadFile, status
@@ -24,7 +24,7 @@ from app.schemas.book import (
     UserBrief,
 )
 from app.schemas.common import create_pagination
-from app.schemas.rating import RatingCreate, RatingResponse, RatingListResponse
+from app.schemas.rating import RatingCreate, RatingListResponse, RatingResponse
 from app.storage import get_storage_provider
 
 logger = structlog.get_logger(__name__)

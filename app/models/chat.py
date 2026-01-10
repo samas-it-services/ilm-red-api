@@ -1,7 +1,7 @@
 """Chat-related database models."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -79,7 +79,7 @@ class ChatSession(Base, UUIDMixin, TimestampMixin):
 
     def archive(self) -> None:
         """Archive this session."""
-        self.archived_at = datetime.now(timezone.utc)
+        self.archived_at = datetime.now(UTC)
 
     def unarchive(self) -> None:
         """Unarchive this session."""
@@ -120,7 +120,7 @@ class ChatMessage(Base, UUIDMixin):
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
         nullable=False,
     )
@@ -190,7 +190,7 @@ class MessageFeedback(Base, UUIDMixin):
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
         nullable=False,
     )

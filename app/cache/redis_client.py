@@ -194,7 +194,7 @@ class CacheService:
         """
         try:
             values = await self.redis.mget(keys)
-            return dict(zip(keys, values))
+            return dict(zip(keys, values, strict=False))
         except Exception as e:
             logger.warning("cache_get_many_error", keys=keys, error=str(e))
             return {k: None for k in keys}

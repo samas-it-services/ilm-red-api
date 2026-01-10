@@ -9,10 +9,11 @@ Supports:
 API Documentation: https://ai.google.dev/docs
 """
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import structlog
 
+from app.ai import get_model_config
 from app.ai.base import (
     AIProvider,
     AIProviderError,
@@ -22,7 +23,6 @@ from app.ai.base import (
     QuotaExceededError,
     RateLimitError,
 )
-from app.ai import get_model_config
 
 logger = structlog.get_logger(__name__)
 

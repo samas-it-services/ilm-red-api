@@ -1,13 +1,13 @@
 """Azure Blob Storage provider."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 
 from azure.storage.blob import (
+    BlobSasPermissions,
     BlobServiceClient,
     ContentSettings,
     generate_blob_sas,
-    BlobSasPermissions,
 )
 
 from app.config import settings
@@ -111,7 +111,7 @@ class AzureBlobStorageProvider(StorageProvider):
             blob_name=path,
             account_key=self.blob_service_client.credential.account_key,
             permission=BlobSasPermissions(read=True),
-            expiry=datetime.now(timezone.utc) + timedelta(seconds=expires_in),
+            expiry=datetime.now(UTC) + timedelta(seconds=expires_in),
             content_disposition="attachment" if for_download else None,
         )
 

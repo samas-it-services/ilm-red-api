@@ -8,8 +8,8 @@ Principle P2: Chunks are for thinking (AI understanding).
 """
 
 import io
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 import fitz  # PyMuPDF
 from PIL import Image

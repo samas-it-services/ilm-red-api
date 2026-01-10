@@ -3,7 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
 from app.api.v1.deps import CurrentUser, DBSession, OptionalUser
 from app.schemas.book import (
@@ -321,21 +321,22 @@ async def get_my_favorites(
 # Page-first reading: View book pages as images
 
 from fastapi import HTTPException
+
+from app.config import settings
 from app.schemas.page import (
-    PageListResponse,
     PageDetailResponse,
     PageGenerationRequest,
     PageGenerationResponse,
-)
-from app.services.page_service import (
-    PageService,
-    BookNotFoundError,
-    UnsupportedFileTypeError,
-    TooManyPagesError,
+    PageListResponse,
 )
 from app.services.embedding_service import create_embedding_service
+from app.services.page_service import (
+    BookNotFoundError,
+    PageService,
+    TooManyPagesError,
+    UnsupportedFileTypeError,
+)
 from app.storage import get_storage_provider
-from app.config import settings
 
 
 def get_page_service() -> PageService:

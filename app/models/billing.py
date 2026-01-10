@@ -1,7 +1,7 @@
 """Billing-related database models."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -55,9 +55,9 @@ class UserCredits(Base):
     # Timestamp
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
-        onupdate=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -171,7 +171,7 @@ class BillingTransaction(Base):
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
         nullable=False,
     )
@@ -244,9 +244,9 @@ class UsageLimit(Base):
     # Timestamp
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(),
-        onupdate=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -316,9 +316,9 @@ class UsageLimit(Base):
     def reset_daily(self) -> None:
         """Reset daily usage counters."""
         self.daily_tokens_used = 0
-        self.daily_reset_at = datetime.now(timezone.utc)
+        self.daily_reset_at = datetime.now(UTC)
 
     def reset_monthly(self) -> None:
         """Reset monthly usage counters."""
         self.monthly_cost_used_cents = 0
-        self.monthly_reset_at = datetime.now(timezone.utc)
+        self.monthly_reset_at = datetime.now(UTC)

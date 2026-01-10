@@ -6,8 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import Pagination
-
 
 class GenerationStatus(str, Enum):
     """Page generation status values."""

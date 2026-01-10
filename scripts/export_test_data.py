@@ -187,7 +187,7 @@ async def main(api_url: str) -> int:
     # Ensure seeds directory exists
     SEEDS_DIR.mkdir(exist_ok=True)
 
-    print(f"\nILM Red API - Data Export")
+    print("\nILM Red API - Data Export")
     print(f"{'=' * 50}")
     print(f"Source: {api_url}")
     print(f"Output: {SEEDS_DIR}")
@@ -208,7 +208,7 @@ async def main(api_url: str) -> int:
 
         print()
         print(f"{'=' * 50}")
-        print(f"Export complete!")
+        print("Export complete!")
         print(f"  Books: {books_count}")
         print()
         print("To import this data locally, run:")

@@ -14,7 +14,6 @@ Model Routing Rules:
 - Fallback chains: If primary model fails, try alternatives
 """
 
-from uuid import UUID
 
 import structlog
 
@@ -24,7 +23,6 @@ from app.ai import (
     FREE_TIER_MODELS,
     MODEL_REGISTRY,
     AIProvider,
-    ModelConfig,
     get_ai_provider,
     get_model_config,
 )
@@ -32,7 +30,6 @@ from app.ai.task_classifier import (
     TaskType,
     classify_task,
     get_recommended_model,
-    TASK_MODEL_RECOMMENDATIONS,
 )
 from app.models.book import Book
 from app.models.user import User

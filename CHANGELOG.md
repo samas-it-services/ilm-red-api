@@ -20,6 +20,95 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-10 | 🚀 feat: Production Deployment v1.1.0
+
+### 📄 **Summary**
+Successfully deployed API v1.1.0 to Azure with Admin Panel, Global Search, and Extended User Profile features. All database migrations applied automatically via entrypoint script.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| All v1.1.0 features | Deployed | Admin, Search, extra_data deployed to production |
+
+### 🧠 **Rationale**
+Production release for mobile app v1.1.0 compatibility.
+
+### 🔄 **Deployment Details**
+| Resource | Value |
+|----------|-------|
+| API URL | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io |
+| Swagger | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/docs |
+| Health | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/health |
+| Region | West US 2 |
+| Replicas | 1-10 (auto-scaling) |
+
+### 🧪 **Testing Recommendations**
+- [ ] Verify health endpoint responds
+- [ ] Test admin endpoints with admin user
+- [ ] Test search functionality
+- [ ] Verify extra_data updates on profile
+
+### 📌 **Follow‑ups**
+- [ ] Monitor Azure costs and optimize if needed
+- [ ] Set up alerting for health check failures
+- [ ] Configure CDN for static assets
+
+---
+
+## 2026-01-10 | 🚀 feat: Admin Panel, Global Search, Extended User Profile
+
+### 📄 **Summary**
+Major feature release implementing Admin Panel with user/book/chat management, Global Search API with suggestions, and extended user profile with future-proof `extra_data` JSONB column. This enables mobile app admin functionality and search capabilities.
+
+### 📁 **Files Changed**
+
+#### Database Migration
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/db/migrations/versions/20260110_0007_user_extra_data.py` | Added | Add `extra_data` JSONB column to users table |
+
+#### Models & Schemas
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/models/user.py` | Modified | Added `extra_data` column and helper properties |
+| `app/schemas/user.py` | Modified | Added `UserExtraData` schema, updated `UserResponse` and `UserUpdate` |
+| `app/schemas/admin.py` | Added | Admin schemas for users, books, chats, stats |
+
+#### API Endpoints
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/api/v1/admin.py` | Added | Admin endpoints for users, books, chats, stats |
+| `app/api/v1/search.py` | Added | Global search and suggestions endpoints |
+| `app/api/v1/users.py` | Modified | Updated PATCH /users/me to handle `extra_data` |
+| `app/api/v1/deps.py` | Modified | Added `AdminUser` type alias |
+| `app/api/v1/router.py` | Modified | Included admin and search routers |
+
+### 🧠 **Rationale**
+- **extra_data JSONB**: Future-proof approach for profile fields without requiring migrations for each new field
+- **Admin Panel**: Mobile app needs to manage users, trigger book processing, view chats
+- **Global Search**: Users need to find books across title, author, description, category
+- **Swagger/OpenAPI**: All new endpoints auto-documented via FastAPI/Pydantic
+
+### 🔄 **Behavior / Compatibility Implications**
+- **Migration Required**: Run `alembic upgrade head` to add `extra_data` column
+- **Backward Compatible**: Existing users will have `extra_data = {}`
+- **Admin Access**: Requires `admin` or `super_admin` role for `/admin/*` endpoints
+- **Search Access**: Public books searchable without auth; private books require auth
+
+### 🧪 **Testing Recommendations**
+- [ ] Run migration and verify `extra_data` column exists
+- [ ] Test PATCH /users/me with `extra_data` field
+- [ ] Test admin endpoints with admin vs regular user
+- [ ] Test search with various query combinations
+- [ ] Verify Swagger docs at `/docs`
+
+### 📌 **Follow‑ups**
+- [ ] Implement actual page generation job queue
+- [ ] Add Redis caching to search for performance
+- [ ] Add search analytics/logging
+
+---
+
 ## 2026-01-09 | 🚀 feat: Chat, Billing, AI Safety, Redis Cache, and Local Dev Tools
 
 ### 📄 **Summary**

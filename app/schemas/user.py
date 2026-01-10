@@ -1,6 +1,6 @@
 """User schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -43,6 +43,53 @@ class AIPreferences(BaseModel):
                 "temperature": 0.7,
                 "max_tokens": 4096,
                 "streaming_enabled": True,
+            }
+        }
+    )
+
+
+class UserExtraData(BaseModel):
+    """Extended user profile data stored in JSONB column.
+
+    This schema provides a future-proof way to add profile fields
+    without requiring database migrations. Any additional fields
+    can be stored in the extra_data column.
+    """
+
+    full_name: str | None = Field(
+        default=None,
+        max_length=200,
+        description="User's full legal name",
+    )
+    city: str | None = Field(
+        default=None,
+        max_length=100,
+        description="City of residence",
+    )
+    state_province: str | None = Field(
+        default=None,
+        max_length=100,
+        description="State or province",
+    )
+    country: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Country of residence",
+    )
+    date_of_birth: date | None = Field(
+        default=None,
+        description="Date of birth",
+    )
+
+    model_config = ConfigDict(
+        extra="allow",  # Allow additional fields for future extensibility
+        json_schema_extra={
+            "example": {
+                "full_name": "John Michael Doe",
+                "city": "Milpitas",
+                "state_province": "California",
+                "country": "United States",
+                "date_of_birth": "1990-05-15",
             }
         }
     )
@@ -91,6 +138,10 @@ class UserResponse(BaseModel):
     bio: str | None
     roles: list[str]
     preferences: dict
+    extra_data: dict | None = Field(
+        default=None,
+        description="Extended profile data (full_name, city, country, etc.)",
+    )
     created_at: datetime
     last_login_at: datetime | None
 
@@ -113,6 +164,12 @@ class UserResponse(BaseModel):
                         "default_model": "gpt-4o-mini",
                         "temperature": 0.7,
                     },
+                },
+                "extra_data": {
+                    "full_name": "John Michael Doe",
+                    "city": "Milpitas",
+                    "state_province": "California",
+                    "country": "United States",
                 },
                 "created_at": "2025-01-01T12:00:00Z",
                 "last_login_at": "2025-01-15T08:30:00Z",
@@ -150,6 +207,10 @@ class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=100)
     bio: str | None = Field(default=None, max_length=500)
     preferences: UserPreferences | None = None
+    extra_data: UserExtraData | None = Field(
+        default=None,
+        description="Extended profile data (full_name, city, country, etc.)",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -163,6 +224,13 @@ class UserUpdate(BaseModel):
                         "default_model": "claude-3-sonnet",
                         "temperature": 0.8,
                     },
+                },
+                "extra_data": {
+                    "full_name": "John Michael Doe",
+                    "city": "Milpitas",
+                    "state_province": "California",
+                    "country": "United States",
+                    "date_of_birth": "1990-05-15",
                 },
             }
         }

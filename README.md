@@ -79,17 +79,27 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 
 | Field | Value |
 |-------|-------|
-| **Current Feature** | Page-First Reading + AI Chunks |
-| **Current Phase** | Phase 1 - Database Models |
-| **Last Updated** | 2026-01-09 |
+| **Current Version** | v1.1.0 |
+| **Last Deployed** | 2026-01-10 |
+| **Status** | Production |
 
-### Features In Progress
+### Completed Features (v1.1.0)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Page Browsing | In Progress | PDF page images with signed URLs |
-| AI Chunks | In Progress | Text extraction and embeddings |
-| RAG Integration | In Progress | Book context in AI chat |
+| Admin Panel | Complete | User/book/chat management for admins |
+| Global Search | Complete | Redis-backed search with autocomplete |
+| Extended Profile | Complete | Future-proof extra_data JSON column |
+| Page Browsing | Complete | PDF page images with signed URLs |
+| AI Chat | Complete | Multi-turn conversations with book context |
+| Cache Management | Complete | Redis stats, invalidation, flush |
+
+### In Progress
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| RAG Integration | In Progress | Book context in AI chat responses |
+| Offline Support | Planned | Page caching for offline reading |
 
 See [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) for detailed progress.
 
@@ -373,14 +383,35 @@ See `.env.example` for the complete list of configuration options.
 
 ### Search
 - `GET /v1/search` - Global search
-- `GET /v1/search/books` - Book search
-- `POST /v1/search/semantic` - Semantic search
-- `GET /v1/search/autocomplete` - Autocomplete
+- `GET /v1/search/suggestions` - Autocomplete suggestions
 
-### AI
-- `POST /v1/ai/sessions` - Create chat session
-- `POST /v1/ai/sessions/{id}/messages` - Send message
-- `GET /v1/ai/billing/balance` - Check credits
+### AI Chat
+- `POST /v1/chat/{book_id}` - Send message (SSE streaming)
+- `GET /v1/chat/{book_id}/history` - Get chat history
+
+### Billing
+- `GET /v1/billing/balance` - Get credit balance
+- `GET /v1/billing/transactions` - Transaction history
+- `GET /v1/billing/limits` - Usage limits
+
+### Admin (Requires admin role)
+- `GET /v1/admin/users` - List/search users
+- `GET /v1/admin/users/{id}` - Get user detail
+- `PATCH /v1/admin/users/{id}` - Update user
+- `POST /v1/admin/users/{id}/disable` - Disable user
+- `GET /v1/admin/books` - List all books
+- `POST /v1/admin/books/{id}/generate-pages` - Generate pages
+- `POST /v1/admin/books/{id}/generate-thumbnails` - Regenerate thumbnails
+- `POST /v1/admin/books/{id}/process-ai` - Process AI embeddings
+- `GET /v1/admin/chats` - List chat sessions
+- `DELETE /v1/admin/chats/{id}` - Delete chat session
+- `GET /v1/admin/stats` - System statistics
+
+### Cache (Requires admin role)
+- `GET /v1/cache/stats` - Cache statistics
+- `GET /v1/cache/health` - Redis health check
+- `POST /v1/cache/invalidate` - Invalidate by pattern
+- `POST /v1/cache/flush` - Flush all (requires confirm)
 
 ### Clubs
 - `GET /v1/clubs` - Discover clubs

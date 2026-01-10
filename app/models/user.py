@@ -49,6 +49,14 @@ class User(Base, UUIDMixin, TimestampMixin):
         server_default="{}",
     )
 
+    # Extended profile data (future-proof JSON storage)
+    extra_data: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default="{}",
+        nullable=True,
+    )
+
     # Activity tracking
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -81,6 +89,32 @@ class User(Base, UUIDMixin, TimestampMixin):
     def is_premium(self) -> bool:
         """Check if user has premium subscription."""
         return any(role in self.roles for role in ["premium", "enterprise", "admin", "super_admin"])
+
+    # Helper properties for common extra_data fields
+    @property
+    def full_name(self) -> str | None:
+        """Get full name from extra_data."""
+        return self.extra_data.get("full_name") if self.extra_data else None
+
+    @property
+    def city(self) -> str | None:
+        """Get city from extra_data."""
+        return self.extra_data.get("city") if self.extra_data else None
+
+    @property
+    def state_province(self) -> str | None:
+        """Get state/province from extra_data."""
+        return self.extra_data.get("state_province") if self.extra_data else None
+
+    @property
+    def country(self) -> str | None:
+        """Get country from extra_data."""
+        return self.extra_data.get("country") if self.extra_data else None
+
+    @property
+    def date_of_birth(self) -> str | None:
+        """Get date of birth from extra_data."""
+        return self.extra_data.get("date_of_birth") if self.extra_data else None
 
 
 class OAuthAccount(Base, UUIDMixin):

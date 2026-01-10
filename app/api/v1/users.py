@@ -55,19 +55,28 @@ Update your profile information and preferences.
 - `avatar_url` - Profile picture URL
 - `bio` - Short biography (max 500 chars)
 - `preferences` - Theme, language, AI model defaults
+- `extra_data` - Extended profile fields (full_name, city, country, etc.)
 
 **Example:**
 ```bash
 curl -X PATCH /v1/users/me \\
   -H "Authorization: Bearer <token>" \\
   -H "Content-Type: application/json" \\
-  -d '{"display_name":"New Name","preferences":{"theme":"dark","default_ai_model":"gpt-4o-mini"}}'
+  -d '{"display_name":"New Name","preferences":{"theme":"dark"},"extra_data":{"full_name":"John Doe","city":"Milpitas"}}'
 ```
 
 **Preferences Options:**
 - `theme`: "light", "dark", or "system"
 - `language`: "en", "ar", etc.
 - `default_ai_model`: Any supported AI model ID
+
+**Extra Data Fields (future-proof JSON storage):**
+- `full_name`: User's full legal name
+- `city`: City of residence
+- `state_province`: State or province
+- `country`: Country of residence
+- `date_of_birth`: Date of birth (YYYY-MM-DD)
+- Additional custom fields can be added without schema changes
 
 **Requires:** Bearer token authentication
     """,
@@ -91,6 +100,16 @@ async def update_current_user_profile(
             new_prefs = new_prefs.model_dump(exclude_unset=True)
         existing_prefs.update(new_prefs)
         update_data["preferences"] = existing_prefs
+
+    # Handle nested extra_data update
+    if "extra_data" in update_data and update_data["extra_data"]:
+        # Merge with existing extra_data
+        existing_extra = current_user.extra_data or {}
+        new_extra = update_data["extra_data"]
+        if hasattr(new_extra, "model_dump"):
+            new_extra = new_extra.model_dump(exclude_unset=True)
+        existing_extra.update(new_extra)
+        update_data["extra_data"] = existing_extra
 
     if update_data:
         user = await user_repo.update(current_user, **update_data)

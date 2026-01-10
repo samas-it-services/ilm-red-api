@@ -1,4 +1,4 @@
-name: Deploy to Azure
+name: CI/CD Pipeline
 
 on:
   push:
@@ -15,9 +15,61 @@ env:
   IMAGE_NAME: ilm-red-api
 
 jobs:
-  build-and-deploy:
+  test:
+    name: Test & Lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pip install poetry==2.2.1
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run linting
+        run: poetry run ruff check .
+
+      - name: Run tests with coverage
+        run: |
+          poetry run pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=test-results.xml \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: test-results.xml
+        if: always()
+
+      - name: Build Docker image (verify)
+        run: |
+          docker build --platform linux/amd64 -f docker/Dockerfile -t test-build .
+          echo "Docker build successful"
+
+  build-and-deploy:
+    name: Build & Deploy
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.test.result == 'success'
 
     steps:
       - name: Checkout code
@@ -94,33 +146,3 @@ jobs:
           echo "| Health | https://$APP_URL/v1/health |" >> $GITHUB_STEP_SUMMARY
           echo "| Swagger | https://$APP_URL/docs |" >> $GITHUB_STEP_SUMMARY
           echo "| Admin Docs | https://$APP_URL/admin/docs |" >> $GITHUB_STEP_SUMMARY
-
-  test:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Poetry
-        run: pip install poetry==2.2.1
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Run linting
-        run: poetry run ruff check .
-
-      - name: Run type checking
-        run: poetry run mypy app --ignore-missing-imports || true
-
-      - name: Build Docker image (test)
-        run: |
-          docker build --platform linux/amd64 -f docker/Dockerfile -t test-build .
-          echo "Docker build successful"

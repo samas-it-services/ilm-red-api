@@ -1,5 +1,11 @@
 # ILM Red API
 
+[![CI/CD](https://github.com/samas-it-services/ilm-red-api/actions/workflows/deploy.yml/badge.svg)](https://github.com/samas-it-services/ilm-red-api/actions/workflows/deploy.yml)
+[![codecov](https://codecov.io/gh/samas-it-services/ilm-red-api/graph/badge.svg)](https://codecov.io/gh/samas-it-services/ilm-red-api)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Environment](https://img.shields.io/badge/Env-Production-green.svg)](https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io)
+
 Cloud-native, vendor-agnostic API platform for digital knowledge management.
 
 ## Overview

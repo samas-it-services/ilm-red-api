@@ -75,6 +75,24 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 | **ReDoc** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/redoc |
 | **OpenAPI JSON** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/openapi.json |
 
+## Current Development Status
+
+| Field | Value |
+|-------|-------|
+| **Current Feature** | Page-First Reading + AI Chunks |
+| **Current Phase** | Phase 1 - Database Models |
+| **Last Updated** | 2026-01-09 |
+
+### Features In Progress
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Page Browsing | In Progress | PDF page images with signed URLs |
+| AI Chunks | In Progress | Text extraction and embeddings |
+| RAG Integration | In Progress | Book context in AI chat |
+
+See [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) for detailed progress.
+
 ## Documentation
 
 | Document | Description |
@@ -83,7 +101,7 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 | [TDD](./docs/TDD.md) | Technical Design Document |
 | [Architecture](./docs/ARCHITECTURE.md) | System Architecture |
 | [OpenAPI](./openapi/api-v1.yaml) | API Specification |
-| [Implementation Plan](./.claude/plans/curious-percolating-valiant.md) | Current implementation plan |
+| [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) | Current development phases |
 
 ## Key Design Principles
 

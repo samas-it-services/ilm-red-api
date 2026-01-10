@@ -95,7 +95,7 @@ class SafetyFlag(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="safety_flags")
-    message: Mapped["ChatMessage | None"] = relationship("ChatMessage", backref="safety_flags")
+    message: Mapped["ChatMessage | None"] = relationship("ChatMessage", backref="safety_flag_records")
     session: Mapped["ChatSession | None"] = relationship("ChatSession", backref="safety_flags")
 
     __table_args__ = (

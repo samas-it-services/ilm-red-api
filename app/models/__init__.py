@@ -6,6 +6,7 @@ from app.models.book import Book, Rating, Favorite, BOOK_CATEGORIES
 from app.models.chat import ChatSession, ChatMessage, MessageFeedback
 from app.models.billing import UserCredits, BillingTransaction, UsageLimit
 from app.models.safety import SafetyFlag
+from app.models.page import PageImage, TextChunk
 
 __all__ = [
     "Base",
@@ -24,4 +25,6 @@ __all__ = [
     "BillingTransaction",
     "UsageLimit",
     "SafetyFlag",
+    "PageImage",
+    "TextChunk",
 ]

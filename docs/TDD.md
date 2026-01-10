@@ -3706,7 +3706,261 @@ const AdaptiveImage: React.FC<{ pageUrls: Record<Resolution, string> }> = ({ pag
 
 ---
 
-## 15. Appendices
+## 15. Page System Design
+
+### 15.1 Overview
+
+Page-first architecture for high-performance book browsing with AI integration. This design separates concerns:
+
+| Concept | Purpose | Users |
+|---------|---------|-------|
+| **Pages** | Visual rendering | End users browsing books |
+| **Chunks** | AI understanding | AI models for RAG |
+
+**Core Principles:**
+1. **P1**: Pages are for **rendering** (user browses visually)
+2. **P2**: Chunks are for **thinking** (AI understands content)
+3. **P3**: API orchestrates, storage serves (no streaming through API)
+4. **P4**: Start simple, iterate fast
+
+### 15.2 Data Models
+
+#### PageImage Model
+
+```python
+class PageImage(Base):
+    __tablename__ = "page_images"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    book_id: Mapped[UUID] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"))
+    page_number: Mapped[int]
+    width: Mapped[int]
+    height: Mapped[int]
+
+    # Storage paths (relative to book)
+    thumbnail_path: Mapped[str]  # books/{id}/pages/thumb/1.jpg
+    medium_path: Mapped[str]     # books/{id}/pages/med/1.jpg
+
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    __table_args__ = (
+        Index("ix_page_images_book_page", "book_id", "page_number", unique=True),
+    )
+```
+
+#### TextChunk Model (for AI/RAG)
+
+```python
+class TextChunk(Base):
+    __tablename__ = "text_chunks"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    book_id: Mapped[UUID] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"))
+    chunk_index: Mapped[int]
+
+    # Content
+    text: Mapped[str]
+    token_count: Mapped[int]
+
+    # Page mapping (for citations)
+    page_start: Mapped[int]
+    page_end: Mapped[int]
+
+    # Embedding for semantic search (OpenAI text-embedding-3-small)
+    embedding: Mapped[Vector] = mapped_column(Vector(1536), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    __table_args__ = (
+        Index("ix_text_chunks_book", "book_id"),
+        Index("ix_text_chunks_embedding", "embedding", postgresql_using="ivfflat"),
+    )
+```
+
+### 15.3 Processing Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Page Generation Pipeline                     │
+└─────────────────────────────────────────────────────────────────┘
+
+  PDF Upload
+      │
+      ▼
+  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+  │ PDF Processor │────▶│ Page Images   │────▶│ Azure Blob    │
+  │  (PyMuPDF)    │     │ (thumbnail,   │     │   Storage     │
+  └───────────────┘     │  medium)      │     └───────────────┘
+      │                 └───────────────┘
+      │
+      ▼
+  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+  │ Text Extract  │────▶│   Chunking    │────▶│  Embeddings   │
+  │  (per page)   │     │ (500 tokens,  │     │   (OpenAI)    │
+  └───────────────┘     │  50 overlap)  │     └───────┬───────┘
+                        └───────────────┘             │
+                                                      ▼
+                                              ┌───────────────┐
+                                              │   pgvector    │
+                                              │  (PostgreSQL) │
+                                              └───────────────┘
+```
+
+**Processing Steps:**
+1. **PDF → Page Images**: Render pages using PyMuPDF (pure Python)
+2. **Page Images → Storage**: Upload to Azure Blob Storage
+3. **PDF → Text Extraction**: Extract text per page
+4. **Text → Chunks**: Split into 500-token segments with 50-token overlap
+5. **Chunks → Embeddings**: Generate using OpenAI text-embedding-3-small
+6. **Embeddings → pgvector**: Store for semantic search
+
+### 15.4 Image Resolutions
+
+| Resolution | Width | Quality | Use Case | TTL |
+|------------|-------|---------|----------|-----|
+| thumbnail | 150px | 70% | Navigation, grids | 6 hours |
+| medium | 800px | 85% | Mobile reading | 15 min |
+
+### 15.5 API Endpoints
+
+#### List Pages
+```
+GET /v1/books/{bookId}/pages
+```
+
+Response:
+```json
+{
+  "book_id": "book_123",
+  "total_pages": 120,
+  "pages": [
+    {
+      "page_number": 1,
+      "width": 612,
+      "height": 792,
+      "thumbnail_url": "https://storage.../thumb/1.jpg?sig=..."
+    }
+  ]
+}
+```
+
+#### Get Page Detail
+```
+GET /v1/books/{bookId}/pages/{pageNumber}
+```
+
+Response:
+```json
+{
+  "page_number": 12,
+  "thumbnail_url": "https://storage.../thumb/12.jpg?sig=...",
+  "medium_url": "https://storage.../med/12.jpg?sig=...",
+  "expires_at": "2026-01-09T12:34:56Z"
+}
+```
+
+#### Generate Pages
+```
+POST /v1/books/{bookId}/pages/generate
+```
+
+Response:
+```json
+{
+  "book_id": "book_123",
+  "status": "completed",
+  "total_pages": 120,
+  "message": null
+}
+```
+
+### 15.6 RAG Integration
+
+When a chat session is linked to a book, the system automatically:
+
+1. **Embed Query**: Generate embedding for user message
+2. **Search Chunks**: Find top 5 similar chunks via pgvector
+3. **Build Context**: Format chunks with page citations
+4. **Enhance Prompt**: Include context in system message
+5. **Track Tokens**: Bill for added context tokens
+
+```python
+# RAG Context Building
+async def get_book_context(book_id: UUID, user_message: str) -> str:
+    # 1. Embed user query
+    query_embedding = await embedding_service.embed(user_message)
+
+    # 2. Search similar chunks
+    chunks = await page_repo.search_similar_chunks(
+        book_id, query_embedding, limit=5
+    )
+
+    # 3. Format with citations
+    context_parts = []
+    for chunk in chunks:
+        context_parts.append(
+            f"[Pages {chunk.page_start}-{chunk.page_end}]\n{chunk.text}"
+        )
+
+    return "\n\n---\n\n".join(context_parts)
+```
+
+### 15.7 Storage Structure
+
+```
+books/{bookId}/
+├── original/
+│   └── book.pdf
+├── pages/
+│   ├── thumb/
+│   │   ├── 1.jpg
+│   │   ├── 2.jpg
+│   │   └── ...
+│   └── med/
+│       ├── 1.jpg
+│       ├── 2.jpg
+│       └── ...
+└── cover/
+    └── cover.jpg
+```
+
+### 15.8 Signed URL Strategy
+
+| Resource | TTL | Rationale |
+|----------|-----|-----------|
+| Page thumbnails | 6 hours | Low sensitivity, frequent access |
+| Page medium | 15 minutes | Prevent scraping, short reading sessions |
+| Cover images | 6 hours | Low sensitivity |
+
+### 15.9 Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| Page generation | < 30s for 50-page PDF |
+| Thumbnail load | < 200ms (signed URL) |
+| RAG retrieval | < 500ms for 5 chunks |
+| Embedding generation | < 2s per chunk |
+
+### 15.10 MVP Scope
+
+**In Scope:**
+- PDF books only (most common format)
+- 2 image resolutions (thumbnail, medium)
+- Synchronous generation (< 100 pages)
+- AI chunks with embeddings (pgvector)
+- Chat RAG integration
+- Direct Azure Blob URLs
+
+**Out of Scope (Future):**
+- EPUB/TXT support
+- High-res/ultra resolutions
+- CDN integration
+- Background job queue for large books
+- Async generation progress
+
+---
+
+## 16. Appendices
 
 ### A. Error Codes
 

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import health, auth, users, books, chat, billing, cache
+from app.api.v1 import health, auth, users, books, chat, billing, cache, files
 
 api_router = APIRouter()
 
@@ -26,6 +26,9 @@ api_router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 
 # Cache management endpoints (admin only)
 api_router.include_router(cache.router, prefix="/cache", tags=["Cache"])
+
+# File serving endpoint (local storage only)
+api_router.include_router(files.router, prefix="/files", tags=["Files"])
 
 # Future endpoints (to be added in later phases)
 # api_router.include_router(search.router, prefix="/search", tags=["Search"])

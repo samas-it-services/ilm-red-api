@@ -259,8 +259,11 @@ build_and_push_image() {
 
     if [ "$SKIP_BUILD" = false ]; then
         # Build image
-        print_step "Building Docker image..."
+        # IMPORTANT: Always use --platform linux/amd64 for Azure deployment
+        # Mac ARM64 builds will fail with "exec format error" on Azure AMD64
+        print_step "Building Docker image (linux/amd64 for Azure)..."
         docker build \
+            --platform linux/amd64 \
             -f "$PROJECT_ROOT/docker/Dockerfile" \
             -t "$image_tag" \
             -t "$image_tag_version" \

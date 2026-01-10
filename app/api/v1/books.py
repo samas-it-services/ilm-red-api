@@ -315,3 +315,144 @@ async def get_my_favorites(
     """Get your list of favorite books."""
     service = BookService(db)
     return await service.get_favorites(current_user, page, limit)
+
+
+# ============= Page Endpoints =============
+# Page-first reading: View book pages as images
+
+from fastapi import HTTPException
+from app.schemas.page import (
+    PageListResponse,
+    PageDetailResponse,
+    PageGenerationRequest,
+    PageGenerationResponse,
+)
+from app.services.page_service import (
+    PageService,
+    BookNotFoundError,
+    UnsupportedFileTypeError,
+    TooManyPagesError,
+)
+from app.services.embedding_service import create_embedding_service
+from app.storage import get_storage_provider
+from app.config import settings
+
+
+def get_page_service() -> PageService:
+    """Create page service with dependencies."""
+    storage = get_storage_provider()
+    embedding_service = create_embedding_service(
+        api_key=settings.openai_api_key if hasattr(settings, 'openai_api_key') else None
+    )
+    return PageService(storage=storage, embedding_service=embedding_service)
+
+
+@router.get(
+    "/{book_id}/pages",
+    response_model=PageListResponse,
+    summary="List book pages",
+    description="Get all pages for a book with thumbnail URLs.",
+)
+async def list_pages(
+    book_id: UUID,
+    db: DBSession,
+    current_user: OptionalUser,
+) -> PageListResponse:
+    """List all pages for a book with thumbnail URLs.
+
+    Returns metadata and signed thumbnail URLs for each page.
+    Thumbnail URLs are valid for 6 hours.
+
+    - **book_id**: UUID of the book
+    """
+    page_service = get_page_service()
+
+    try:
+        return await page_service.get_page_list(book_id, db)
+    except BookNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Book {book_id} not found",
+        )
+
+
+@router.get(
+    "/{book_id}/pages/{page_number}",
+    response_model=PageDetailResponse,
+    summary="Get page details",
+    description="Get signed URLs for a specific page at all resolutions.",
+)
+async def get_page(
+    book_id: UUID,
+    page_number: int,
+    db: DBSession,
+    current_user: OptionalUser,
+) -> PageDetailResponse:
+    """Get details for a specific page including signed URLs.
+
+    Returns signed URLs for thumbnail and medium resolutions.
+    - Thumbnail URL valid for 6 hours
+    - Medium URL valid for 15 minutes
+
+    - **book_id**: UUID of the book
+    - **page_number**: Page number (1-indexed)
+    """
+    page_service = get_page_service()
+
+    try:
+        return await page_service.get_page_detail(book_id, page_number, db)
+    except BookNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page {page_number} not found for book {book_id}",
+        )
+
+
+@router.post(
+    "/{book_id}/pages/generate",
+    response_model=PageGenerationResponse,
+    summary="Generate pages",
+    description="Generate page images and AI chunks for a book.",
+)
+async def generate_pages(
+    book_id: UUID,
+    db: DBSession,
+    current_user: CurrentUser,
+    request: PageGenerationRequest | None = None,
+) -> PageGenerationResponse:
+    """Generate page images and AI chunks for a book.
+
+    This endpoint processes a PDF book to:
+    1. Render each page as images (thumbnail and medium resolutions)
+    2. Extract text from all pages
+    3. Chunk text for AI processing
+    4. Generate embeddings for semantic search
+
+    **Limitations (MVP):**
+    - Only PDF books supported
+    - Maximum 100 pages for synchronous processing
+    - Processing is synchronous (waits for completion)
+
+    - **book_id**: UUID of the book to process
+    - **force**: If true, regenerate even if pages exist
+    """
+    page_service = get_page_service()
+    force = request.force if request else False
+
+    try:
+        return await page_service.generate_pages_and_chunks(book_id, db, force=force)
+    except BookNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Book {book_id} not found",
+        )
+    except UnsupportedFileTypeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except TooManyPagesError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

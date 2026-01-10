@@ -259,6 +259,17 @@ PUT  /v1/books/{bookId}/cover              # Upload custom cover
 DELETE /v1/books/{bookId}/cover            # Remove custom cover
 ```
 
+## Docker Deployment (CRITICAL)
+
+**ALWAYS build Docker images with `--platform linux/amd64`** when deploying to Azure.
+
+Mac (ARM64) → Azure (AMD64) requires cross-platform build:
+```bash
+docker build --platform linux/amd64 -t image:tag -f docker/Dockerfile .
+```
+
+This is already configured in `scripts/deploy-azure.sh`. If you ever build Docker images manually for Azure deployment, you MUST include the `--platform linux/amd64` flag or the container will fail with `exec format error`.
+
 ## Important Notes
 
 1. **Never use Supabase directly** - Use the database abstraction layer

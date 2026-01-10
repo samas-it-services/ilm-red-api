@@ -37,6 +37,26 @@ To provide a scalable, secure, and extensible API platform that enables hundreds
 - **Secondary**: Educational institutions and enterprises
 - **Tertiary**: Third-party integration partners
 
+### 1.5 Main Features
+
+| Feature ID | Feature | Status | Description |
+|------------|---------|--------|-------------|
+| F-AUTH | Authentication | ✅ Done | JWT, API keys, OAuth, RBAC |
+| F-BOOKS | Book Management | ✅ Done | CRUD, multi-format upload, metadata |
+| F-USERS | User Management | ✅ Done | Profiles, preferences, social |
+| F-SEARCH | Search | 🔲 Planned | Full-text, semantic, autocomplete |
+| F-PAGES | Page Browsing | 🚧 In Progress | PDF page images, thumbnails, signed URLs |
+| F-CHUNKS | AI Chunks | 🚧 In Progress | Text extraction, chunking, embeddings |
+| F-CHAT | AI Chat | ✅ Done | Multi-model, streaming, billing |
+| F-RAG | Book Context Chat | 🚧 In Progress | RAG with page citations |
+| F-BILLING | AI Billing | ✅ Done | Credits, transactions, limits |
+| F-SAFETY | AI Safety | ✅ Done | Content moderation, filtering |
+| F-CLUBS | Book Clubs | 🔲 Planned | Social features, discussions |
+| F-PROGRESS | Reading Progress | 🔲 Planned | Cross-device sync |
+| F-ANALYTICS | Analytics | 🔲 Planned | Usage metrics, dashboards |
+
+See [Implementation Plan](./IMPLEMENTATION_PLAN.md) for current development phase details.
+
 ---
 
 ## 2. Product Overview
@@ -887,6 +907,67 @@ Emit events for page generation lifecycle:
 - `book.pages.generation.completed` - All pages extracted
 - `book.pages.generation.failed` - Critical failure occurred
 - `book.cover.updated` - Cover changed (auto or custom)
+
+#### FR-PAGE-007: AI Text Chunks
+**Priority:** High
+**Description:** Extract and chunk book text for AI-powered features (RAG).
+
+**Acceptance Criteria:**
+- Extract text from PDF pages using PyMuPDF
+- Chunk text into segments (500 tokens max, 50 token overlap)
+- Each chunk maps to page range for citations
+- Store chunks with metadata (page_start, page_end, token_count)
+- Generate embeddings using OpenAI text-embedding-3-small
+- Store embeddings in pgvector for semantic search
+
+**Data Model:**
+```
+TextChunk:
+- id: UUID
+- book_id: FK → books
+- chunk_index: int
+- text: string
+- token_count: int
+- page_start: int
+- page_end: int
+- embedding: vector(1536)
+```
+
+#### FR-PAGE-008: RAG Integration for Chat
+**Priority:** High
+**Description:** Enhance AI chat with relevant book context.
+
+**Acceptance Criteria:**
+- Embed user query when chat session has book context
+- Search similar chunks using pgvector cosine distance
+- Retrieve top 5 most relevant chunks
+- Include chunks in AI prompt with page citations
+- AI responses reference specific page numbers
+- Track RAG context tokens in billing
+
+**Chat Enhancement Flow:**
+1. User sends message in book-linked session
+2. Embed user message
+3. Search book's chunks for similar content
+4. Include top 5 chunks in system prompt
+5. Format: `[Pages X-Y] chunk text...`
+6. AI generates response with citations
+7. Return response with page references
+
+**API Response with Citations:**
+```json
+{
+  "content": "According to the book...",
+  "citations": [
+    {"page_start": 15, "page_end": 16, "excerpt": "...relevant text..."},
+    {"page_start": 42, "page_end": 42, "excerpt": "...another reference..."}
+  ],
+  "rag_context": {
+    "chunks_used": 5,
+    "tokens_added": 1200
+  }
+}
+```
 
 ### 4.12 Billing & Credits API
 

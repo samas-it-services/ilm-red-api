@@ -43,6 +43,8 @@ aiofiles = "^23.2.1"
 # PDF Processing
 pypdf = "^3.17.0"
 pdfplumber = "^0.10.3"
+pymupdf = "^1.24.0"       # Page rendering (pure Python, no system deps)
+pillow = "^10.2.0"        # Image processing for JPEG conversion
 
 # Caching & Background Tasks
 redis = "^5.0.1"

@@ -35,16 +35,39 @@ router = APIRouter()
 logger = structlog.get_logger(__name__)
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register new user",
+    description="""
+Create a new user account and receive authentication tokens.
+
+**Password Requirements:**
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+
+**Example:**
+```bash
+curl -X POST /v1/auth/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"user@example.com","password":"SecurePass123!","username":"johndoe","display_name":"John Doe"}'
+```
+
+**Returns:** JWT access token (15 min) and refresh token (7 days)
+    """,
+    responses={
+        409: {"description": "Email or username already exists"},
+        422: {"description": "Validation error (weak password, invalid email format, etc.)"},
+    },
+)
 async def register(
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """
-    Register a new user account.
-
-    Returns access and refresh tokens on success.
-    """
+    """Register a new user account."""
     user_repo = UserRepository(db)
 
     # Check if email already exists
@@ -82,16 +105,38 @@ async def register(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Login with email and password",
+    description="""
+Authenticate with email and password to receive tokens.
+
+**Security:** Password is verified using Argon2 hashing.
+
+**Example:**
+```bash
+curl -X POST /v1/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"user@example.com","password":"SecurePass123!"}'
+```
+
+**After Login:**
+Use the `access_token` in the Authorization header:
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+    """,
+    responses={
+        401: {"description": "Invalid email or password"},
+        403: {"description": "Account suspended or inactive"},
+    },
+)
 async def login(
     data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """
-    Authenticate user with email and password.
-
-    Returns access and refresh tokens on success.
-    """
+    """Authenticate user with email and password."""
     user_repo = UserRepository(db)
 
     # Find user
@@ -126,16 +171,36 @@ async def login(
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh access token",
+    description="""
+Exchange a refresh token for a new access token.
+
+**Token Rotation:** For security, the old refresh token is revoked and a new one is issued.
+
+**When to Use:**
+- Access tokens expire in 15 minutes
+- Call this endpoint before expiration to maintain session
+- Refresh tokens expire in 7 days
+
+**Example:**
+```bash
+curl -X POST /v1/auth/refresh \\
+  -H "Content-Type: application/json" \\
+  -d '{"refresh_token":"your_refresh_token_here"}'
+```
+    """,
+    responses={
+        401: {"description": "Invalid or expired refresh token"},
+    },
+)
 async def refresh_token(
     data: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """
-    Refresh access token using refresh token.
-
-    The old refresh token is revoked and a new one is issued (token rotation).
-    """
+    """Refresh access token using refresh token."""
     user_repo = UserRepository(db)
 
     # Hash the provided token
@@ -170,14 +235,29 @@ async def refresh_token(
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout and revoke refresh token",
+    description="""
+End session by revoking the refresh token.
+
+**Note:** The access token remains valid until it expires (15 min max).
+For immediate client-side logout, also discard the access token locally.
+
+**Example:**
+```bash
+curl -X POST /v1/auth/logout \\
+  -H "Content-Type: application/json" \\
+  -d '{"refresh_token":"your_refresh_token_here"}'
+```
+    """,
+)
 async def logout(
     data: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """
-    Logout by revoking the refresh token.
-    """
+    """Logout by revoking the refresh token."""
     user_repo = UserRepository(db)
 
     # Hash the provided token
@@ -191,7 +271,20 @@ async def logout(
 
 
 # API Key endpoints
-@router.get("/api-keys", response_model=list[ApiKeyResponse])
+@router.get(
+    "/api-keys",
+    response_model=list[ApiKeyResponse],
+    summary="List API keys",
+    description="""
+Get all API keys for the authenticated user.
+
+**Security:** Only the key prefix is returned (e.g., `ilm_abc12345...`), not the full key.
+
+**Use Case:** View active keys, check last usage, manage key lifecycle.
+
+**Requires:** Bearer token authentication
+    """,
+)
 async def list_api_keys(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
@@ -202,17 +295,41 @@ async def list_api_keys(
     return [ApiKeyResponse.model_validate(k) for k in keys]
 
 
-@router.post("/api-keys", response_model=ApiKeyCreatedResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/api-keys",
+    response_model=ApiKeyCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create API key",
+    description="""
+Generate a new API key for server-to-server integrations.
+
+**IMPORTANT:** The full API key is only shown ONCE in this response. Store it securely!
+
+**Example:**
+```bash
+curl -X POST /v1/auth/api-keys \\
+  -H "Authorization: Bearer <token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Production Server","permissions":["read","write"],"expires_in_days":90}'
+```
+
+**Permissions:**
+- `read` - Read-only access to books, profiles
+- `write` - Create/update books, chat messages
+- `admin` - Administrative operations (if authorized)
+
+**Usage:**
+```
+X-API-Key: ilm_live_abc123...
+```
+    """,
+)
 async def create_api_key(
     data: ApiKeyCreate,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> ApiKeyCreatedResponse:
-    """
-    Create a new API key.
-
-    The full key is only returned once - store it securely!
-    """
+    """Create a new API key."""
     user_repo = UserRepository(db)
 
     # Generate the key
@@ -241,7 +358,25 @@ async def create_api_key(
     )
 
 
-@router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/api-keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete API key",
+    description="""
+Permanently revoke an API key.
+
+**Effect:** Any requests using this key will immediately receive 401 Unauthorized.
+
+**Example:**
+```bash
+curl -X DELETE /v1/auth/api-keys/550e8400-e29b-41d4-a716-446655440000 \\
+  -H "Authorization: Bearer <token>"
+```
+    """,
+    responses={
+        404: {"description": "API key not found or doesn't belong to you"},
+    },
+)
 async def delete_api_key(
     key_id: str,
     current_user: CurrentUser,

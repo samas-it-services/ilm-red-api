@@ -13,7 +13,29 @@ router = APIRouter()
 logger = structlog.get_logger(__name__)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get my profile",
+    description="""
+Get the authenticated user's full profile.
+
+**Includes:**
+- Email (private)
+- Username and display name
+- Avatar URL and bio
+- Preferences (theme, language, AI model defaults)
+- Account status and creation date
+
+**Example:**
+```bash
+curl -X GET /v1/users/me \\
+  -H "Authorization: Bearer <token>"
+```
+
+**Requires:** Bearer token authentication
+    """,
+)
 async def get_current_user_profile(
     current_user: CurrentUser,
 ) -> UserResponse:
@@ -21,7 +43,35 @@ async def get_current_user_profile(
     return UserResponse.model_validate(current_user)
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update my profile",
+    description="""
+Update your profile information and preferences.
+
+**Updatable Fields:**
+- `display_name` - Your public display name
+- `avatar_url` - Profile picture URL
+- `bio` - Short biography (max 500 chars)
+- `preferences` - Theme, language, AI model defaults
+
+**Example:**
+```bash
+curl -X PATCH /v1/users/me \\
+  -H "Authorization: Bearer <token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"display_name":"New Name","preferences":{"theme":"dark","default_ai_model":"gpt-4o-mini"}}'
+```
+
+**Preferences Options:**
+- `theme`: "light", "dark", or "system"
+- `language`: "en", "ar", etc.
+- `default_ai_model`: Any supported AI model ID
+
+**Requires:** Bearer token authentication
+    """,
+)
 async def update_current_user_profile(
     data: UserUpdate,
     current_user: CurrentUser,
@@ -50,7 +100,29 @@ async def update_current_user_profile(
     return UserResponse.model_validate(current_user)
 
 
-@router.get("/{user_id}", response_model=PublicUserResponse)
+@router.get(
+    "/{user_id}",
+    response_model=PublicUserResponse,
+    summary="Get user profile (public)",
+    description="""
+Get a user's **public** profile by their ID.
+
+**Includes:** Display name, avatar, bio, join date, public books count
+**Excludes:** Email, preferences, private data
+
+**Use Case:** Viewing other users' profiles, social features, author pages
+
+**Example:**
+```bash
+curl -X GET /v1/users/550e8400-e29b-41d4-a716-446655440000
+```
+
+**Note:** No authentication required for public profiles.
+    """,
+    responses={
+        404: {"description": "User not found or account inactive"},
+    },
+)
 async def get_user_profile(
     user_id: str,
     db: AsyncSession = Depends(get_db),

@@ -13,16 +13,47 @@ from app.db.session import get_db
 router = APIRouter()
 
 
-@router.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
-    """
-    Health check endpoint for monitoring and load balancer probes.
+@router.get(
+    "/health",
+    summary="Health check",
+    description="""
+System health check for monitoring and load balancers.
 
-    Checks:
-    - API is running
-    - Database connectivity
-    - Returns version info
-    """
+**Checks:**
+- API is running
+- Database connectivity
+- Redis cache (optional)
+
+**Response Example:**
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "environment": "production",
+  "timestamp": "2026-01-10T12:00:00Z",
+  "checks": {
+    "database": "healthy",
+    "redis": "healthy"
+  }
+}
+```
+
+**Status Values:**
+- `healthy` - All systems operational
+- `degraded` - Some non-critical components failing (e.g., Redis down)
+- `unhealthy` - Critical failure (HTTP 503)
+
+**Use Case:** Configure your load balancer to probe `/v1/health` every 30 seconds.
+
+**No authentication required.**
+    """,
+    responses={
+        200: {"description": "System is healthy or degraded"},
+        503: {"description": "System is unhealthy (critical failure)"},
+    },
+)
+async def health_check(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Health check endpoint for monitoring and load balancer probes."""
     health_status = {
         "status": "healthy",
         "version": settings.app_version,

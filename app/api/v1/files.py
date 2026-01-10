@@ -9,18 +9,47 @@ from app.storage.local import LocalStorageProvider
 router = APIRouter()
 
 
-@router.get("/{file_path:path}")
+@router.get(
+    "/{file_path:path}",
+    summary="Serve file (development only)",
+    description="""
+Serve files from local storage with signed URL validation.
+
+**Development Only** - In production, files are served directly from Azure Blob Storage CDN with SAS tokens for better performance and global distribution.
+
+**How It Works:**
+1. Page generation creates files in local storage
+2. URLs are generated with HMAC signatures and expiration
+3. This endpoint validates the signature before serving
+4. Files are cached for 1 hour
+
+**URL Format:**
+```
+/v1/files/books/{book_id}/pages/thumb/1.jpg?expires=1704067200&signature=abc123...
+```
+
+**Parameters:**
+- `expires` - Unix timestamp when URL expires (typically 6 hours from generation)
+- `signature` - HMAC-SHA256 signature for validation
+
+**Supported File Types:**
+- `.jpg`, `.jpeg` - Page images (thumbnail, medium)
+- `.png` - Cover images
+- `.pdf` - Original book files
+    """,
+    responses={
+        200: {"description": "File content returned successfully"},
+        400: {"description": "Not available in production mode"},
+        401: {"description": "Invalid or expired signature"},
+        404: {"description": "File not found"},
+    },
+)
 async def serve_file(
     file_path: str,
-    expires: int = Query(..., description="Expiration timestamp"),
-    signature: str = Query(..., description="HMAC signature"),
+    expires: int = Query(..., description="Unix timestamp when URL expires"),
+    signature: str = Query(..., description="HMAC-SHA256 signature for validation"),
 ):
-    """
-    Serve files from local storage with signed URL validation.
-
-    This endpoint only works with LocalStorageProvider (development).
-    In production, Azure Blob Storage serves files directly via CDN.
-    """
+    """Serve files from local storage with signed URL validation."""
     storage = get_storage_provider()
 
     # Only works for local storage

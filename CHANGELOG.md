@@ -20,6 +20,41 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-10 | 📘 docs: Comprehensive Admin API Documentation
+
+### 📄 **Summary**
+Added comprehensive documentation for the Admin API including separate Swagger UI, detailed README, and updated PRD/TDD with admin endpoint specifications.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `docs/ADMIN_API.md` | Added | Comprehensive Admin API documentation with examples |
+| `docs/PRD.md` | Modified | Updated Section 4.9 with implemented admin endpoints |
+| `app/main.py` | Modified | Added `/admin/docs` Swagger UI and `/admin/openapi.json` |
+
+### 🧠 **Rationale**
+Admin API needed comprehensive documentation for developers and operators managing the ILM Red platform.
+
+### 🔄 **New Admin Documentation**
+
+| Documentation | URL |
+|---------------|-----|
+| **Admin Swagger UI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/admin/docs |
+| **Admin OpenAPI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/admin/openapi.json |
+| **Admin API Guide** | [docs/ADMIN_API.md](./docs/ADMIN_API.md) |
+
+### 🧪 **Testing Recommendations**
+- [ ] Verify `/admin/docs` renders Swagger UI
+- [ ] Verify `/admin/openapi.json` returns filtered schema
+- [ ] Test all documented admin endpoints
+
+### 📌 **Follow‑ups**
+- [ ] Add admin API integration tests
+- [ ] Add audit logging for admin actions
+- [ ] Create admin SDK helpers
+
+---
+
 ## 2026-01-10 | 🚀 feat: Production Deployment v1.1.0
 
 ### 📄 **Summary**
@@ -38,6 +73,7 @@ Production release for mobile app v1.1.0 compatibility.
 |----------|-------|
 | API URL | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io |
 | Swagger | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/docs |
+| Admin Swagger | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/admin/docs |
 | Health | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/health |
 | Region | West US 2 |
 | Replicas | 1-10 (auto-scaling) |

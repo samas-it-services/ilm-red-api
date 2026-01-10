@@ -13,6 +13,8 @@ from app.config import settings
 from app.api.v1.router import api_router
 from app.db.session import init_db, close_db
 from app.cache.redis_client import RedisCache
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 
 # Configure structured logging
 structlog.configure(
@@ -34,6 +36,144 @@ structlog.configure(
 )
 
 logger = structlog.get_logger(__name__)
+
+# Admin API tag descriptions
+ADMIN_OPENAPI_TAGS = [
+    {
+        "name": "Admin - Users",
+        "description": """
+**User Management (Admin Only)**
+
+List, view, edit, and disable user accounts.
+
+**Capabilities:**
+- Search users by email, username, display name
+- Filter by status (active, suspended, deleted)
+- Update user roles and status
+- Disable accounts for policy violations
+        """,
+    },
+    {
+        "name": "Admin - Books",
+        "description": """
+**Book Management (Admin Only)**
+
+Manage all books and trigger processing operations.
+
+**Processing Actions:**
+- Generate page images from PDF
+- Regenerate thumbnails
+- Process AI embeddings and chunks
+        """,
+    },
+    {
+        "name": "Admin - Chats",
+        "description": """
+**Chat Session Management (Admin Only)**
+
+View and delete chat sessions across all users.
+
+**Features:**
+- List all chat sessions
+- View session details with messages
+- Delete sessions for compliance
+        """,
+    },
+    {
+        "name": "Admin - Cache",
+        "description": """
+**Redis Cache Management (Admin Only)**
+
+Monitor and manage the Redis cache.
+
+**Operations:**
+- View cache statistics and health
+- Invalidate cache by pattern
+- Delete specific keys
+- Flush all cache (use with caution)
+        """,
+    },
+    {
+        "name": "Admin - Stats",
+        "description": """
+**System Statistics (Admin Only)**
+
+View comprehensive system metrics.
+
+**Metrics Include:**
+- User counts and growth
+- Book counts and processing status
+- Storage usage
+- AI usage and costs
+        """,
+    },
+]
+
+# Admin API description
+ADMIN_API_DESCRIPTION = """
+# ILM Red Admin API
+
+**Administrative endpoints for platform management**
+
+---
+
+## Overview
+
+The Admin API provides privileged access to manage:
+- **Users** - View, edit, disable accounts
+- **Books** - Manage content, trigger processing
+- **Chat Sessions** - View and delete conversations
+- **Cache** - Redis management
+- **Statistics** - System metrics
+
+---
+
+## Authentication
+
+All admin endpoints require:
+1. **Valid JWT Token** - `Authorization: Bearer <token>`
+2. **Admin Role** - User must have `admin` or `super_admin` role
+
+---
+
+## Quick Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/admin/users` | GET | List all users |
+| `/v1/admin/users/{id}` | GET | Get user details |
+| `/v1/admin/users/{id}` | PATCH | Update user |
+| `/v1/admin/users/{id}/disable` | POST | Disable user |
+| `/v1/admin/books` | GET | List all books |
+| `/v1/admin/books/{id}` | GET | Get book details |
+| `/v1/admin/books/{id}/generate-pages` | POST | Generate pages |
+| `/v1/admin/books/{id}/generate-thumbnails` | POST | Regenerate thumbnails |
+| `/v1/admin/books/{id}/process-ai` | POST | Process AI embeddings |
+| `/v1/admin/chats` | GET | List chat sessions |
+| `/v1/admin/chats/{id}` | GET | Get chat details |
+| `/v1/admin/chats/{id}` | DELETE | Delete chat session |
+| `/v1/admin/stats` | GET | System statistics |
+| `/v1/cache/stats` | GET | Cache statistics |
+| `/v1/cache/health` | GET | Cache health check |
+| `/v1/cache/invalidate` | POST | Invalidate by pattern |
+| `/v1/cache/flush` | POST | Flush all cache |
+
+---
+
+## Documentation
+
+- [Full Admin API Guide](/docs/ADMIN_API.md)
+- [Main API Docs](/docs)
+
+---
+
+## Rate Limits
+
+| Role | Requests/min |
+|------|--------------|
+| admin | 300 |
+| super_admin | 600 |
+"""
 
 # OpenAPI tag descriptions with use cases
 OPENAPI_TAGS = [
@@ -394,6 +534,50 @@ def create_app() -> FastAPI:
 
     # Include API router
     app.include_router(api_router, prefix="/v1")
+
+    # Admin-specific OpenAPI schema
+    def get_admin_openapi_schema():
+        """Generate OpenAPI schema for admin endpoints only."""
+        if not hasattr(app, "admin_openapi_schema"):
+            # Filter routes to only include admin and cache endpoints
+            admin_routes = []
+            for route in app.routes:
+                if hasattr(route, "path"):
+                    if "/admin" in route.path or "/cache" in route.path:
+                        admin_routes.append(route)
+
+            # Create admin-specific schema
+            openapi_schema = get_openapi(
+                title="ILM Red Admin API",
+                version=settings.app_version,
+                description=ADMIN_API_DESCRIPTION,
+                routes=app.routes,  # Use all routes, filter happens in docs
+                tags=ADMIN_OPENAPI_TAGS,
+            )
+
+            # Filter paths to only admin endpoints
+            filtered_paths = {}
+            for path, methods in openapi_schema.get("paths", {}).items():
+                if "/admin" in path or "/cache" in path:
+                    filtered_paths[path] = methods
+            openapi_schema["paths"] = filtered_paths
+
+            app.admin_openapi_schema = openapi_schema
+        return app.admin_openapi_schema
+
+    @app.get("/admin/docs", include_in_schema=False)
+    async def admin_swagger_ui_html():
+        """Admin-specific Swagger UI documentation."""
+        return get_swagger_ui_html(
+            openapi_url="/admin/openapi.json",
+            title="ILM Red Admin API - Swagger UI",
+            swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png",
+        )
+
+    @app.get("/admin/openapi.json", include_in_schema=False)
+    async def admin_openapi_json():
+        """Admin-specific OpenAPI schema."""
+        return get_admin_openapi_schema()
 
     return app
 

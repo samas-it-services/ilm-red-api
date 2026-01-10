@@ -682,26 +682,80 @@ GET /v1/admin/analytics/books
 GET /v1/admin/analytics/ai
 ```
 
-### 4.9 Admin API
+### 4.9 Admin API (v1.1.0 - Implemented)
 
-#### FR-ADMIN-001: User Management
-```
-GET    /v1/admin/users              List all users
-GET    /v1/admin/users/{id}         Get user details
-PATCH  /v1/admin/users/{id}         Update user (roles, status)
-DELETE /v1/admin/users/{id}         Delete/suspend user
-POST   /v1/admin/users/{id}/impersonate  Impersonate user
-```
+**Documentation:** [Admin API Guide](./ADMIN_API.md) | [Admin Swagger](/admin/docs)
 
-#### FR-ADMIN-002: Content Moderation
+#### FR-ADMIN-001: User Management (Implemented)
 ```
-GET  /v1/admin/moderation/queue     Get moderation queue
-POST /v1/admin/moderation/approve   Approve content
-POST /v1/admin/moderation/reject    Reject content
-POST /v1/admin/moderation/flag      Flag content for review
+GET    /v1/admin/users              List all users (search, filter, paginate)
+GET    /v1/admin/users/{id}         Get user details with stats
+PATCH  /v1/admin/users/{id}         Update user (roles, status, extra_data)
+POST   /v1/admin/users/{id}/disable Disable user account
 ```
 
-#### FR-ADMIN-003: Audit Logs
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| page | int | Page number (default: 1) |
+| per_page | int | Items per page (max: 100) |
+| search | string | Search by email, username, display_name |
+| status | string | Filter: active, suspended, deleted |
+| role | string | Filter: user, admin, super_admin |
+
+#### FR-ADMIN-002: Book Management (Implemented)
+```
+GET    /v1/admin/books                              List all books
+GET    /v1/admin/books/{id}                         Get book with processing status
+POST   /v1/admin/books/{id}/generate-pages          Trigger page generation
+POST   /v1/admin/books/{id}/generate-thumbnails     Regenerate thumbnails
+POST   /v1/admin/books/{id}/process-ai              Generate embeddings/chunks
+DELETE /v1/admin/books/{id}                         Delete book
+```
+
+**Processing Status Values:**
+- `pending` - Awaiting processing
+- `processing` - Currently processing
+- `ready` - All processing complete
+- `failed` - Processing failed
+
+#### FR-ADMIN-003: Chat Session Management (Implemented)
+```
+GET    /v1/admin/chats              List all chat sessions
+GET    /v1/admin/chats/{id}         Get session with messages
+DELETE /v1/admin/chats/{id}         Delete chat session
+```
+
+#### FR-ADMIN-004: System Statistics (Implemented)
+```
+GET /v1/admin/stats                 Get system statistics
+```
+
+**Response includes:**
+- User counts (total, active, new today/week/month)
+- Book counts (total, public, processing, failed)
+- Storage usage (total, by type)
+- AI usage (sessions, messages, tokens, cost)
+- Cache metrics (hit rate, memory)
+
+#### FR-ADMIN-005: Cache Management (Implemented)
+```
+GET  /v1/cache/stats                Redis cache statistics
+GET  /v1/cache/health               Redis health check
+POST /v1/cache/invalidate           Invalidate by pattern
+DELETE /v1/cache/keys               Delete specific keys
+POST /v1/cache/flush                Flush all (requires confirm)
+```
+
+**Common Cache Patterns:**
+| Pattern | Description |
+|---------|-------------|
+| `books:*` | All book cache |
+| `users:*` | All user cache |
+| `search:*` | Search results |
+| `book:{id}:*` | Specific book |
+
+#### FR-ADMIN-006: Audit Logs (Planned)
 ```
 GET /v1/admin/audit-logs
 {
@@ -731,7 +785,7 @@ Log format:
 }
 ```
 
-#### FR-ADMIN-004: System Configuration
+#### FR-ADMIN-007: System Configuration (Planned)
 ```
 GET  /v1/admin/config               Get system config
 PUT  /v1/admin/config               Update config
@@ -1435,4 +1489,6 @@ X-RateLimit-RetryAfter: 30
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.1.0 | Jan 2026 | saMas IT Services | Added Admin API documentation (FR-ADMIN-001 to FR-ADMIN-005) |
+| 2.0.0 | Jan 2026 | ILM Red Team | Added AI chat, billing, page browsing requirements |
 | 1.0.0 | Jan 2025 | ILM Red Team | Initial version |

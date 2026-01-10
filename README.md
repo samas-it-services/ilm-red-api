@@ -72,8 +72,10 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 | Documentation | URL |
 |---------------|-----|
 | **Swagger UI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/docs |
+| **Admin Swagger UI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/admin/docs |
 | **ReDoc** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/redoc |
 | **OpenAPI JSON** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/openapi.json |
+| **Admin OpenAPI** | https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/admin/openapi.json |
 
 ## Current Development Status
 
@@ -109,6 +111,7 @@ See [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) for detailed progress.
 |----------|-------------|
 | [PRD](./docs/PRD.md) | Product Requirements Document |
 | [TDD](./docs/TDD.md) | Technical Design Document |
+| [Admin API Guide](./docs/ADMIN_API.md) | Comprehensive Admin API documentation |
 | [Architecture](./docs/ARCHITECTURE.md) | System Architecture |
 | [OpenAPI](./openapi/api-v1.yaml) | API Specification |
 | [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) | Current development phases |

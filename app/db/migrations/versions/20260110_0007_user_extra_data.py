@@ -1,7 +1,7 @@
 """Add extra_data JSONB column to users table for flexible profile fields.
 
-Revision ID: 20260110_0007
-Revises: 20260109_0006_pages_chunks
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-01-10
 
 This migration adds a future-proof JSONB column for storing additional user
@@ -14,8 +14,8 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic
-revision = "20260110_0007"
-down_revision = "20260109_0006"
+revision: str = "0007"
+down_revision: str = "0006"
 branch_labels = None
 depends_on = None
 

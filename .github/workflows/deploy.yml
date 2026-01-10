@@ -48,7 +48,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/ilmred_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: test-secret-key-for-ci
-      ENVIRONMENT: test
+      ENVIRONMENT: development
 
     steps:
       - name: Checkout code

@@ -33,6 +33,40 @@ from app.storage import get_storage_provider
 logger = structlog.get_logger(__name__)
 
 
+def detect_file_type_by_magic(content: bytes) -> str | None:
+    """Detect file type by magic bytes (first few bytes of file).
+
+    Returns:
+        File type string ('pdf', 'epub', 'txt') or None if not recognized.
+    """
+    if len(content) < 4:
+        return None
+
+    # PDF: starts with %PDF
+    if content[:4] == b"%PDF":
+        return "pdf"
+
+    # EPUB: ZIP file with specific content (PK signature)
+    # EPUB is a ZIP archive, we check for ZIP signature
+    if content[:2] == b"PK":
+        # Could be EPUB (which is a specialized ZIP)
+        # For more robust check, we'd look for "mimetype" entry
+        return "epub"
+
+    # TXT: Check if it's valid UTF-8 or ASCII text
+    # Sample first 1000 bytes to check for text
+    sample = content[:1000]
+    try:
+        sample.decode("utf-8")
+        # Additional check: no null bytes in text files
+        if b"\x00" not in sample:
+            return "txt"
+    except UnicodeDecodeError:
+        pass
+
+    return None
+
+
 class BookService:
     """Service for book-related business logic."""
 
@@ -71,18 +105,31 @@ class BookService:
         Raises:
             HTTPException: If validation fails
         """
-        # Validate file type
-        content_type = file.content_type or "application/octet-stream"
-        if content_type not in self.ALLOWED_MIME_TYPES:
+        # Read file content first for magic byte validation
+        content = await file.read()
+
+        # Validate file type by magic bytes (more secure than trusting Content-Type header)
+        detected_type = detect_file_type_by_magic(content)
+        if detected_type is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid file type: {content_type}. Allowed types: PDF, EPUB, TXT",
+                detail="Unrecognized file format. Allowed types: PDF, EPUB, TXT",
             )
 
-        file_type = self.ALLOWED_MIME_TYPES[content_type]
+        # Also validate Content-Type header matches detected type
+        content_type = file.content_type or "application/octet-stream"
+        if content_type in self.ALLOWED_MIME_TYPES:
+            declared_type = self.ALLOWED_MIME_TYPES[content_type]
+            if declared_type != detected_type:
+                logger.warning(
+                    "File type mismatch",
+                    declared_type=declared_type,
+                    detected_type=detected_type,
+                    filename=file.filename,
+                )
+                # Trust the detected type over the declared type
 
-        # Read file content
-        content = await file.read()
+        file_type = detected_type
 
         # Validate file size
         file_size = len(content)

@@ -3,9 +3,12 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 
 from app.api.v1.deps import CurrentUser, DBSession, OptionalUser
+
+# Allowed sort fields for defense-in-depth
+ALLOWED_SORT_FIELDS = {"created_at", "updated_at", "title", "author", "category"}
 from app.schemas.book import (
     BookCategory,
     BookCreate,
@@ -102,6 +105,13 @@ async def list_books(
     Public books are visible to everyone.
     Private books are only visible to their owners.
     """
+    # Validate sort field to prevent SQL injection
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort field. Allowed: {', '.join(sorted(ALLOWED_SORT_FIELDS))}",
+        )
+
     service = BookService(db)
 
     filters = BookFilters(
@@ -319,8 +329,6 @@ async def get_my_favorites(
 
 # ============= Page Endpoints =============
 # Page-first reading: View book pages as images
-
-from fastapi import HTTPException
 
 from app.config import settings
 from app.schemas.page import (

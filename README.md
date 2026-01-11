@@ -87,7 +87,7 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 
 | Field | Value |
 |-------|-------|
-| **Current Version** | v1.2.0 |
+| **Current Version** | v1.2.1 |
 | **Last Deployed** | 2026-01-11 |
 | **Status** | Production |
 

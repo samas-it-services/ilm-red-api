@@ -20,6 +20,41 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-11 | 🚀 feat: Enhanced Security and Validation (v1.2.1)
+
+### 📄 **Summary**
+Additional security hardening: rate limiting on search endpoints, sort field validation, and magic byte file validation to prevent MIME type spoofing attacks.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/api/v1/search.py` | Modified | Added 30 req/min rate limit on search, 60 req/min on suggestions |
+| `app/api/v1/books.py` | Modified | Added sort field allowlist validation |
+| `app/services/book_service.py` | Modified | Added magic byte file type detection |
+| `app/config.py` | Modified | Bump version to 1.2.1 |
+
+### 🧠 **Rationale**
+
+| Security Enhancement | Purpose |
+|---------------------|---------|
+| Search rate limiting | Prevent abuse of search endpoints |
+| Sort field validation | Defense-in-depth against SQL injection |
+| Magic byte validation | Prevent MIME type spoofing attacks on file uploads |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| Search rate limit | 30 req/min per IP on /search, 60 req/min on /suggestions |
+| Sort validation | Invalid sort fields return 400 error with allowed fields list |
+| Magic byte check | Files must have valid PDF/EPUB/TXT magic bytes regardless of Content-Type header |
+
+### 📌 **Follow‑ups**
+- [ ] Add more comprehensive file content validation
+- [ ] Consider Redis-backed rate limiting for distributed deployments
+
+---
+
 ## 2026-01-11 | 🔒 security: Rate Limiting and Path Traversal Fix (v1.2.0)
 
 ### 📄 **Summary**

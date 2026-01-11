@@ -9,7 +9,7 @@ import json
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from app.api.v1.deps import OptionalUser
 from app.cache.redis_client import RedisCache
 from app.db.session import get_db
 from app.models.book import Book
+from app.rate_limiter import limiter
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -123,7 +124,9 @@ curl -X GET "/v1/search?q=python&category=technology&page=1"
 ```
     """,
 )
+@limiter.limit("30/minute")
 async def search_books(
+    request: Request,
     q: str = Query(..., min_length=2, max_length=200, description="Search query"),
     category: str | None = Query(None, description="Category filter"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -265,7 +268,9 @@ curl -X GET "/v1/search/suggestions?q=pyth"
 ```
     """,
 )
+@limiter.limit("60/minute")
 async def get_suggestions(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=100, description="Search query"),
     current_user: OptionalUser = None,
     db: AsyncSession = Depends(get_db),

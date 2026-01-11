@@ -105,8 +105,25 @@ class BookService:
         Raises:
             HTTPException: If validation fails
         """
-        # Read file content first for magic byte validation
+        # Read file content first for validation
         content = await file.read()
+
+        # Check for empty file first (before other validations)
+        if len(content) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Empty file uploaded",
+            )
+
+        # Validate file extension is allowed
+        filename = file.filename or ""
+        ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+        allowed_extensions = {"pdf", "epub", "txt"}
+        if ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type '.{ext}'. Allowed: PDF, EPUB, TXT",
+            )
 
         # Validate file type by magic bytes (more secure than trusting Content-Type header)
         detected_type = detect_file_type_by_magic(content)
@@ -137,12 +154,6 @@ class BookService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File too large. Maximum size: {self.MAX_FILE_SIZE // (1024*1024)} MB",
-            )
-
-        if file_size == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Empty file uploaded",
             )
 
         # Calculate file hash for deduplication

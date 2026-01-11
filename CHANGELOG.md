@@ -20,6 +20,60 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-11 | 🔒 security: Rate Limiting and Path Traversal Fix (v1.2.0)
+
+### 📄 **Summary**
+Implemented critical security improvements including rate limiting for AI chat endpoints and fixed a path traversal vulnerability in local file storage. Also updated the app motto to "Read, Chat, Understand".
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/rate_limiter.py` | Added | Central rate limiter module using slowapi |
+| `app/main.py` | Modified | Integrated rate limiter middleware, updated API motto |
+| `app/api/v1/chat.py` | Modified | Added 10 req/min rate limits to AI endpoints |
+| `app/storage/local.py` | Modified | Fixed path traversal vulnerability |
+| `pyproject.toml` | Modified | Added slowapi dependency |
+| `README.md` | Modified | Updated tagline to "Read, Chat, Understand" |
+
+### 🧠 **Rationale**
+
+| Security Issue | Risk | Fix |
+|----------------|------|-----|
+| No rate limiting | DoS attacks, API abuse, cost explosion from unlimited AI calls | Implemented slowapi with 10 req/min on chat endpoints |
+| Path traversal | Arbitrary file read/write via `../` sequences | Added resolve() + base path validation |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| Rate limiting | Users exceeding 10 AI requests/minute receive HTTP 429 |
+| Path traversal fix | Requests with `../` in paths now raise ValueError |
+| New motto | API documentation shows "Read, Chat, Understand" |
+
+### 🧪 **Testing Recommendations**
+
+```bash
+# Test rate limiting (11th request should fail with 429)
+for i in {1..11}; do
+  curl -X POST http://localhost:8000/v1/chats/SESSION_ID/messages \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"content": "test"}' \
+    -w "%{http_code}\n" -o /dev/null -s
+done
+
+# Test path traversal protection
+# Should raise ValueError, not access /etc/passwd
+```
+
+### 📌 **Follow‑ups**
+- [ ] Add rate limiting to search endpoints (30/min)
+- [ ] Add magic byte file validation for uploads
+- [ ] Consider Redis-backed rate limiting for distributed deployments
+- [ ] Add sort field allowlist validation
+
+---
+
 ## 2026-01-10 | 📘 docs: Comprehensive Admin API Documentation
 
 ### 📄 **Summary**

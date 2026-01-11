@@ -10,11 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.v1.router import api_router
 from app.cache.redis_client import RedisCache
 from app.config import settings
 from app.db.session import close_db, init_db
+from app.rate_limiter import limiter
 
 # Configure structured logging
 structlog.configure(
@@ -315,7 +318,7 @@ Serves files from local storage with signed URL validation.
 API_DESCRIPTION = """
 # ILM Red API
 
-**Cloud-native backend for AI-powered digital book management**
+**Read, Chat, Understand** — AI-powered digital book management
 
 ---
 
@@ -471,6 +474,10 @@ def create_app() -> FastAPI:
         terms_of_service="https://ilm-red.com/terms",
         lifespan=lifespan,
     )
+
+    # Rate limiter state and exception handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # CORS middleware
     app.add_middleware(

@@ -3,10 +3,11 @@
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.deps import CurrentUser, DBSession
+from app.rate_limiter import limiter
 from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageListResponse,
@@ -180,7 +181,9 @@ async def delete_session(
     summary="Send message",
     description="Send a message and receive an AI response (non-streaming).",
 )
+@limiter.limit("10/minute")
 async def send_message(
+    request: Request,
     session_id: UUID,
     db: DBSession,
     current_user: CurrentUser,
@@ -245,7 +248,9 @@ async def get_messages(
         }
     },
 )
+@limiter.limit("10/minute")
 async def stream_message(
+    request: Request,
     session_id: UUID,
     db: DBSession,
     current_user: CurrentUser,

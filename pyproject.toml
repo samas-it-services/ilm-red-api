@@ -50,6 +50,9 @@ pillow = "^10.2.0"        # Image processing for JPEG conversion
 redis = "^5.0.1"
 arq = "^0.25.0"
 
+# Rate Limiting
+slowapi = "^0.1.9"
+
 # Utilities
 structlog = "^24.1.0"
 httpx = "^0.26.0"

@@ -38,7 +38,11 @@ class LocalStorageProvider(StorageProvider):
         """Get full filesystem path for a storage path."""
         # Sanitize path to prevent directory traversal
         safe_path = Path(path).as_posix().lstrip("/")
-        return self.base_path / safe_path
+        full_path = (self.base_path / safe_path).resolve()
+        # Security check: ensure resolved path is still under base_path
+        if not str(full_path).startswith(str(self.base_path.resolve())):
+            raise ValueError("Path traversal attempted")
+        return full_path
 
     async def upload(
         self,

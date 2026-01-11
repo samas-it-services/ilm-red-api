@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![Environment](https://img.shields.io/badge/Env-Production-green.svg)](https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io)
 
-Cloud-native, vendor-agnostic API platform for digital knowledge management.
+**Read, Chat, Understand** — AI-powered digital book management API.
 
 ## Overview
 
@@ -87,14 +87,16 @@ Designed for scale: **500,000+ users**, **10M+ books**, **100K+ concurrent conne
 
 | Field | Value |
 |-------|-------|
-| **Current Version** | v1.1.0 |
-| **Last Deployed** | 2026-01-10 |
+| **Current Version** | v1.2.0 |
+| **Last Deployed** | 2026-01-11 |
 | **Status** | Production |
 
-### Completed Features (v1.1.0)
+### Completed Features (v1.2.0)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
+| Rate Limiting | Complete | 10 req/min on AI chat endpoints (slowapi) |
+| Path Traversal Fix | Complete | Secure file storage path validation |
 | Admin Panel | Complete | User/book/chat management for admins |
 | Global Search | Complete | Redis-backed search with autocomplete |
 | Extended Profile | Complete | Future-proof extra_data JSON column |
@@ -159,6 +161,8 @@ curl -H "X-API-Key: ilm_live_abc123..." https://api.ilm-red.com/v1/books
 | Free | 60 | 10,000 |
 | Premium | 300 | 100,000 |
 | Enterprise | 1,000 | Unlimited |
+
+**AI Chat Rate Limits:** 10 requests/minute per IP (enforced via slowapi)
 
 ## Quick Start
 

@@ -8,6 +8,7 @@ import structlog
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.book import Book, Rating
 from app.models.user import User
 from app.repositories.book_repo import BookRepository
@@ -25,6 +26,8 @@ from app.schemas.book import (
 )
 from app.schemas.common import create_pagination
 from app.schemas.rating import RatingCreate, RatingListResponse, RatingResponse
+from app.services.embedding_service import create_embedding_service
+from app.services.page_service import PageService
 from app.storage import get_storage_provider
 
 logger = structlog.get_logger(__name__)
@@ -147,6 +150,38 @@ class BookService:
             file_type=file_type,
             file_size=file_size,
         )
+
+        # Auto-generate pages for PDF files (<=100 pages, synchronous)
+        if file_type == "pdf":
+            try:
+                embedding_service = create_embedding_service(
+                    api_key=settings.openai_api_key if hasattr(settings, 'openai_api_key') else None
+                )
+                page_service = PageService(storage=self.storage, embedding_service=embedding_service)
+
+                generation_result = await page_service.generate_pages_and_chunks(book.id, self.db)
+
+                if generation_result.status.value == "completed":
+                    logger.info(
+                        "Auto-generated pages",
+                        book_id=str(book.id),
+                        pages=generation_result.total_pages,
+                        chunks=generation_result.total_chunks,
+                    )
+                else:
+                    logger.warning(
+                        "Page generation incomplete",
+                        book_id=str(book.id),
+                        status=generation_result.status.value,
+                        message=generation_result.message,
+                    )
+            except Exception as e:
+                # Don't fail the upload if page generation fails
+                logger.warning(
+                    "Failed to auto-generate pages",
+                    book_id=str(book.id),
+                    error=str(e),
+                )
 
         return BookUploadResponse(
             id=book.id,

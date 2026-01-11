@@ -4,6 +4,8 @@ Provides full-text search across books with Redis caching for performance.
 Falls back to PostgreSQL full-text search if Redis is unavailable.
 """
 
+import hashlib
+import json
 from uuid import UUID
 
 import structlog
@@ -13,11 +15,34 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import OptionalUser
+from app.cache.redis_client import RedisCache
 from app.db.session import get_db
 from app.models.book import Book
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
+
+# Cache TTLs
+SEARCH_CACHE_TTL = 300  # 5 minutes for search results
+SUGGESTIONS_CACHE_TTL = 600  # 10 minutes for suggestions
+
+
+def _build_search_cache_key(q: str, category: str | None, page: int, page_size: int) -> str:
+    """Build cache key for search queries (anonymous users only)."""
+    key_data = json.dumps({
+        "q": q.lower(),
+        "category": category,
+        "page": page,
+        "page_size": page_size,
+    }, sort_keys=True)
+    key_hash = hashlib.md5(key_data.encode()).hexdigest()
+    return f"search:books:{key_hash}"
+
+
+def _build_suggestions_cache_key(q: str) -> str:
+    """Build cache key for search suggestions (anonymous users only)."""
+    key_hash = hashlib.md5(q.lower().encode()).hexdigest()
+    return f"search:suggestions:{key_hash}"
 
 
 # ============================================================================
@@ -108,6 +133,19 @@ async def search_books(
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     """Search books with full-text matching."""
+    # For anonymous users, try to get from cache first
+    cache_key = None
+    if current_user is None:
+        cache_key = _build_search_cache_key(q, category, page, page_size)
+        try:
+            redis = await RedisCache.get_client()
+            cached_result = await redis.get(cache_key)
+            if cached_result:
+                logger.info("search_cache_hit", query=q, category=category)
+                return SearchResponse.model_validate_json(cached_result)
+        except Exception as e:
+            logger.debug("search_cache_miss", error=str(e))
+
     search_term = f"%{q}%"
 
     # Build base query
@@ -163,7 +201,7 @@ async def search_books(
         user_id=str(current_user.id) if current_user else None,
     )
 
-    return SearchResponse(
+    response = SearchResponse(
         query=q,
         results=results,
         total=total,
@@ -171,6 +209,17 @@ async def search_books(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+    # Cache the result for anonymous users
+    if cache_key is not None:
+        try:
+            redis = await RedisCache.get_client()
+            await redis.setex(cache_key, SEARCH_CACHE_TTL, response.model_dump_json())
+            logger.debug("search_cached", query=q, ttl=SEARCH_CACHE_TTL)
+        except Exception as e:
+            logger.debug("search_cache_save_failed", error=str(e))
+
+    return response
 
 
 @router.get(
@@ -200,6 +249,19 @@ async def get_suggestions(
     db: AsyncSession = Depends(get_db),
 ) -> SuggestionsResponse:
     """Get auto-complete suggestions."""
+    # For anonymous users, try to get from cache first
+    cache_key = None
+    if current_user is None:
+        cache_key = _build_suggestions_cache_key(q)
+        try:
+            redis = await RedisCache.get_client()
+            cached_result = await redis.get(cache_key)
+            if cached_result:
+                logger.debug("suggestions_cache_hit", query=q)
+                return SuggestionsResponse.model_validate_json(cached_result)
+        except Exception as e:
+            logger.debug("suggestions_cache_miss", error=str(e))
+
     search_term = f"{q}%"  # Prefix match for suggestions
     suggestions: list[SearchSuggestion] = []
 
@@ -284,7 +346,18 @@ async def get_suggestions(
         count=len(suggestions),
     )
 
-    return SuggestionsResponse(
+    response = SuggestionsResponse(
         query=q,
         suggestions=suggestions,
     )
+
+    # Cache the result for anonymous users
+    if cache_key is not None:
+        try:
+            redis = await RedisCache.get_client()
+            await redis.setex(cache_key, SUGGESTIONS_CACHE_TTL, response.model_dump_json())
+            logger.debug("suggestions_cached", query=q, ttl=SUGGESTIONS_CACHE_TTL)
+        except Exception as e:
+            logger.debug("suggestions_cache_save_failed", error=str(e))
+
+    return response

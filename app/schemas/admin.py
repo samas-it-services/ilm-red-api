@@ -1,4 +1,4 @@
-"""Admin schemas for user, book, and system management."""
+"""Admin schemas for user, book, rating, and system management."""
 
 from datetime import datetime
 from typing import Literal
@@ -231,6 +231,65 @@ class SystemStatsResponse(BaseModel):
                 "total_chat_messages": 85000,
                 "storage_used_bytes": 107374182400,
                 "storage_used_formatted": "100.0 GB",
+            }
+        }
+    )
+
+
+# ============================================================================
+# Rating Management Schemas
+# ============================================================================
+
+
+class AdminRatingResponse(BaseModel):
+    """Admin view of a rating."""
+
+    id: UUID
+    book_id: UUID
+    book_title: str | None = None
+    user_id: UUID
+    user_username: str | None = None
+    rating: int
+    review: str | None = None
+    flag_count: int = 0
+    is_flagged: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminRatingListParams(BaseModel):
+    """Query parameters for listing ratings."""
+
+    book_id: UUID | None = Field(default=None, description="Filter by book")
+    user_id: UUID | None = Field(default=None, description="Filter by user")
+    flagged_only: bool = Field(default=False, description="Show only flagged ratings")
+    min_rating: int | None = Field(default=None, ge=1, le=5, description="Minimum rating")
+    max_rating: int | None = Field(default=None, ge=1, le=5, description="Maximum rating")
+    page: int = Field(default=1, ge=1, description="Page number")
+    page_size: int = Field(default=20, ge=1, le=100, description="Items per page")
+
+
+class RatingAnalytics(BaseModel):
+    """Rating analytics for admin."""
+
+    total_ratings: int
+    average_rating: float
+    distribution: dict[str, int]  # {"1": 10, "2": 20, ...}
+    top_rated_books: list[dict]  # [{book_id, title, avg_rating, count}, ...]
+    most_reviewed_books: list[dict]
+    recent_flagged_count: int
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_ratings": 1250,
+                "average_rating": 4.2,
+                "distribution": {"1": 45, "2": 78, "3": 203, "4": 412, "5": 512},
+                "top_rated_books": [],
+                "most_reviewed_books": [],
+                "recent_flagged_count": 5,
             }
         }
     )

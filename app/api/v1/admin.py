@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import AdminUser
 from app.db.session import get_db
-from app.models.book import Book
+from app.models.book import Book, Rating
 from app.models.chat import ChatMessage, ChatSession
+from app.models.rating_flag import RatingFlag
 from app.models.user import User
 from app.repositories.book_repo import BookRepository
 from app.repositories.user_repo import UserRepository
@@ -22,11 +23,13 @@ from app.schemas.admin import (
     AdminChatMessageResponse,
     AdminChatSessionDetailResponse,
     AdminChatSessionResponse,
+    AdminRatingResponse,
     AdminUserResponse,
     AdminUserUpdate,
     BookProcessingRequest,
     BookProcessingResponse,
     PaginatedResponse,
+    RatingAnalytics,
     SystemStatsResponse,
 )
 
@@ -672,11 +675,11 @@ async def get_stats(
     # Book stats
     total_books = await db.scalar(select(func.count()).select_from(Book)) or 0
     public_books = await db.scalar(
-        select(func.count()).select_from(Book).where(Book.is_public is True)
+        select(func.count()).select_from(Book).where(Book.visibility == "public")
     ) or 0
     private_books = total_books - public_books
     books_with_pages = await db.scalar(
-        select(func.count()).select_from(Book).where(Book.pages_count > 0)
+        select(func.count()).select_from(Book).where(Book.page_count > 0)
     ) or 0
 
     # Chat stats
@@ -704,4 +707,227 @@ async def get_stats(
         total_chat_messages=total_chat_messages,
         storage_used_bytes=storage_used_bytes,
         storage_used_formatted=storage_used_formatted,
+    )
+
+
+# ============================================================================
+# Rating Management Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/ratings",
+    response_model=dict,
+    summary="List all ratings (admin)",
+    description="List all ratings system-wide with filtering and pagination.",
+)
+async def list_ratings(
+    admin_user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+    book_id: UUID | None = Query(None, description="Filter by book"),
+    user_id: UUID | None = Query(None, description="Filter by user"),
+    flagged_only: bool = Query(False, description="Show only flagged ratings"),
+    min_rating: int | None = Query(None, ge=1, le=5),
+    max_rating: int | None = Query(None, ge=1, le=5),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> dict:
+    """List all ratings with filtering."""
+    # Build query
+    query = select(Rating)
+
+    # Apply filters
+    filters = []
+    if book_id:
+        filters.append(Rating.book_id == book_id)
+    if user_id:
+        filters.append(Rating.user_id == user_id)
+    if min_rating:
+        filters.append(Rating.rating >= min_rating)
+    if max_rating:
+        filters.append(Rating.rating <= max_rating)
+
+    if filters:
+        query = query.where(and_(*filters))
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size).order_by(Rating.created_at.desc())
+
+    result = await db.execute(query)
+    ratings = result.scalars().all()
+
+    # Enrich with book/user info and flag count
+    items = []
+    for rating in ratings:
+        # Get flag count
+        flag_count_query = select(func.count()).where(
+            and_(
+                RatingFlag.rating_id == rating.id,
+                RatingFlag.status == "pending",
+            )
+        )
+        flag_count = await db.scalar(flag_count_query) or 0
+
+        # Skip if flagged_only and no flags
+        if flagged_only and flag_count == 0:
+            continue
+
+        # Get book title
+        book_query = select(Book.title).where(Book.id == rating.book_id)
+        book_result = await db.execute(book_query)
+        book_title = book_result.scalar()
+
+        # Get user username
+        user_query = select(User.username).where(User.id == rating.user_id)
+        user_result = await db.execute(user_query)
+        user_username = user_result.scalar()
+
+        item = AdminRatingResponse(
+            id=rating.id,
+            book_id=rating.book_id,
+            book_title=book_title,
+            user_id=rating.user_id,
+            user_username=user_username,
+            rating=rating.rating,
+            review=rating.review,
+            flag_count=flag_count,
+            is_flagged=flag_count > 0,
+            created_at=rating.created_at,
+            updated_at=rating.updated_at,
+        )
+        items.append(item)
+
+    logger.info(
+        "Admin listed ratings",
+        admin_id=str(admin_user.id),
+        total=total,
+        page=page,
+    )
+
+    return PaginatedResponse.create(items, total, page, page_size).model_dump()
+
+
+@router.delete(
+    "/ratings/{rating_id}",
+    summary="Delete rating (admin)",
+    description="Delete an inappropriate rating.",
+)
+async def delete_rating(
+    rating_id: UUID,
+    admin_user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete a rating."""
+    query = select(Rating).where(Rating.id == rating_id)
+    result = await db.execute(query)
+    rating = result.scalar_one_or_none()
+
+    if not rating:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    await db.delete(rating)
+    await db.commit()
+
+    logger.info(
+        "Admin deleted rating",
+        admin_id=str(admin_user.id),
+        rating_id=str(rating_id),
+    )
+
+    return {"message": "Rating deleted", "rating_id": str(rating_id)}
+
+
+@router.get(
+    "/analytics/ratings",
+    response_model=RatingAnalytics,
+    summary="Get rating analytics (admin)",
+    description="Get comprehensive rating statistics and trends.",
+)
+async def get_rating_analytics(
+    admin_user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> RatingAnalytics:
+    """Get rating analytics."""
+    # Total ratings and average
+    stats_query = select(
+        func.count(Rating.id).label("total"),
+        func.avg(Rating.rating).label("average"),
+    )
+    stats_result = await db.execute(stats_query)
+    stats = stats_result.one()
+
+    # Distribution
+    dist_query = select(
+        Rating.rating,
+        func.count(Rating.id).label("count"),
+    ).group_by(Rating.rating)
+    dist_result = await db.execute(dist_query)
+    distribution = {str(row[0]): row[1] for row in dist_result.all()}
+
+    # Top rated books (with at least 3 ratings)
+    top_books_query = (
+        select(
+            Book.id,
+            Book.title,
+            func.avg(Rating.rating).label("avg_rating"),
+            func.count(Rating.id).label("rating_count"),
+        )
+        .join(Rating, Rating.book_id == Book.id)
+        .group_by(Book.id, Book.title)
+        .having(func.count(Rating.id) >= 3)
+        .order_by(func.avg(Rating.rating).desc())
+        .limit(10)
+    )
+    top_books_result = await db.execute(top_books_query)
+    top_rated_books = [
+        {
+            "book_id": str(row[0]),
+            "title": row[1],
+            "avg_rating": round(float(row[2]), 2),
+            "rating_count": row[3],
+        }
+        for row in top_books_result.all()
+    ]
+
+    # Most reviewed books
+    most_reviewed_query = (
+        select(
+            Book.id,
+            Book.title,
+            func.count(Rating.id).label("review_count"),
+            func.avg(Rating.rating).label("avg_rating"),
+        )
+        .join(Rating, Rating.book_id == Book.id)
+        .group_by(Book.id, Book.title)
+        .order_by(func.count(Rating.id).desc())
+        .limit(10)
+    )
+    most_reviewed_result = await db.execute(most_reviewed_query)
+    most_reviewed_books = [
+        {
+            "book_id": str(row[0]),
+            "title": row[1],
+            "review_count": row[2],
+            "avg_rating": round(float(row[3]), 2),
+        }
+        for row in most_reviewed_result.all()
+    ]
+
+    # Recent flagged count
+    flagged_count = await db.scalar(
+        select(func.count()).select_from(RatingFlag).where(RatingFlag.status == "pending")
+    ) or 0
+
+    return RatingAnalytics(
+        total_ratings=stats.total or 0,
+        average_rating=round(float(stats.average), 2) if stats.average else 0.0,
+        distribution=distribution,
+        top_rated_books=top_rated_books,
+        most_reviewed_books=most_reviewed_books,
+        recent_flagged_count=flagged_count,
     )

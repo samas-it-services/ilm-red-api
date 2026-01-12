@@ -110,6 +110,25 @@ View comprehensive system metrics.
 - AI usage and costs
         """,
     },
+    {
+        "name": "Admin - Ratings",
+        "description": """
+**Rating Moderation (Admin Only)**
+
+Manage and moderate book ratings system-wide.
+
+**Features:**
+- View all ratings with filtering
+- See flagged ratings (user-reported)
+- Delete inappropriate ratings
+- Rating analytics and trends
+
+**Analytics:**
+- Rating distribution (1-5 stars)
+- Top-rated books (min 3 ratings)
+- Most reviewed books
+        """,
+    },
 ]
 
 # Admin API description
@@ -243,11 +262,16 @@ Upload, browse, and manage your digital library.
 - Search and filter your library
 - Browse page-by-page with generated images
 - Rate and favorite books
+- Flag inappropriate ratings (spam, offensive, etc.)
 - Control visibility (public/private/friends)
 
 **Page Browsing:**
 After upload, call `POST /books/{id}/pages/generate` to create page images.
 Then browse with `GET /books/{id}/pages`.
+
+**Rating Flags:**
+Report inappropriate ratings with `POST /books/{book_id}/ratings/{rating_id}/flag`.
+Reasons: spam, offensive, irrelevant, other.
         """,
     },
     {

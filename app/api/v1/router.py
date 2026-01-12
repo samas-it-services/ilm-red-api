@@ -2,7 +2,19 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import admin, auth, billing, books, cache, chat, files, health, progress, search, users
+from app.api.v1 import (
+    admin,
+    auth,
+    billing,
+    books,
+    cache,
+    chat,
+    files,
+    health,
+    progress,
+    search,
+    users,
+)
 
 api_router = APIRouter()
 

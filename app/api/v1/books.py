@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from sqlalchemy import and_, select
 
 from app.api.v1.deps import CurrentUser, DBSession, OptionalUser
 
@@ -26,6 +27,7 @@ from app.schemas.rating import (
     RatingListResponse,
     RatingResponse,
 )
+from app.schemas.rating_flag import RatingFlagCreate, RatingFlagResponse
 from app.services.book_service import BookService
 
 router = APIRouter()
@@ -272,6 +274,62 @@ async def delete_rating(
     """Delete your rating for a book."""
     service = BookService(db)
     await service.delete_rating(book_id, current_user)
+
+
+# Rating flag endpoints (user-reported)
+
+
+@router.post(
+    "/{book_id}/ratings/{rating_id}/flag",
+    response_model=RatingFlagResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Flag rating as inappropriate",
+    description="Report a rating for spam, offensive content, or other issues.",
+)
+async def flag_rating(
+    book_id: UUID,
+    rating_id: UUID,
+    flag_data: RatingFlagCreate,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> RatingFlagResponse:
+    """Flag a rating as inappropriate."""
+    from app.models.book import Rating
+    from app.models.rating_flag import RatingFlag
+
+    # Verify rating exists and belongs to the book
+    rating = await db.get(Rating, rating_id)
+    if not rating or rating.book_id != book_id:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    # Cannot flag your own rating
+    if rating.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot flag your own rating")
+
+    # Check if already flagged by this user
+    existing = await db.execute(
+        select(RatingFlag).where(
+            and_(
+                RatingFlag.rating_id == rating_id,
+                RatingFlag.reporter_id == current_user.id,
+            )
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="You have already flagged this rating")
+
+    # Create flag
+    flag = RatingFlag(
+        rating_id=rating_id,
+        reporter_id=current_user.id,
+        reason=flag_data.reason,
+        details=flag_data.details,
+    )
+    db.add(flag)
+    await db.commit()
+    await db.refresh(flag)
+
+    return RatingFlagResponse.model_validate(flag)
 
 
 # Favorite endpoints

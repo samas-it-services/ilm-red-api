@@ -20,6 +20,54 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🚀 feat: Rating moderation and analytics for admins
+
+### 📄 **Summary**
+Add comprehensive rating moderation system for admins with analytics, flagging, and management tools. Users can flag inappropriate ratings, and admins can view/delete flagged content with detailed analytics.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/models/rating_flag.py` | Added | RatingFlag model for user reports |
+| `app/schemas/rating_flag.py` | Added | Flag request/response schemas |
+| `app/schemas/admin.py` | Modified | Add AdminRatingResponse, RatingAnalytics |
+| `app/api/v1/admin.py` | Modified | Add rating list, delete, analytics endpoints |
+| `app/api/v1/books.py` | Modified | Add flag rating endpoint |
+| `app/main.py` | Modified | Update OpenAPI docs for rating features |
+| `app/db/migrations/versions/20260112_0837_*.py` | Added | Rating flags table migration |
+| `tests/unit/test_rating_analytics.py` | Added | Unit tests for rating calculations |
+
+### 🧠 **Rationale**
+Admins need tools to moderate inappropriate ratings and understand rating patterns. Users need ability to report spam/offensive reviews. Analytics help identify top content and trends.
+
+### 🔄 **Behavior / Compatibility Implications**
+- New admin endpoints: GET/DELETE /v1/admin/ratings, GET /v1/admin/analytics/ratings
+- Users can flag ratings: POST /v1/books/{book_id}/ratings/{rating_id}/flag
+- Flags tracked with reason (spam, offensive, irrelevant, other)
+- Analytics show distribution, top books, flagged counts
+- Fixed admin stats bug (visibility field)
+
+### 🧪 **Testing Recommendations**
+```bash
+# Run unit tests
+poetry run pytest tests/unit/test_rating_analytics.py -v
+
+# Test admin rating list
+curl http://localhost:8000/v1/admin/ratings?flagged_only=true \
+  -H "Authorization: Bearer <admin_token>"
+
+# Test rating analytics
+curl http://localhost:8000/v1/admin/analytics/ratings \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+### 📌 **Follow‑ups**
+- Add mobile admin screens for rating moderation
+- Run database migration for rating_flags table
+- Consider auto-hiding ratings with multiple flags
+
+---
+
 ## 2026-01-12 | 🚀 feat: Reading progress tracking with cross-device sync
 
 ### 📄 **Summary**

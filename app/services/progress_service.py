@@ -6,7 +6,6 @@ import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from app.repositories.book_repo import BookRepository
 from app.repositories.progress_repo import ProgressRepository
 from app.schemas.progress import ProgressResponse, ProgressUpdate, ReadingStats, RecentRead

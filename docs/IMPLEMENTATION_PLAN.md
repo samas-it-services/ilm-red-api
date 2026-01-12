@@ -426,7 +426,29 @@ Each phase is considered complete when:
 - `dcb4ad0` - feat: Add personalized recommendations to home page (mobile)
 
 ### Phase 6: Bookmarks, Highlights, Notes
-- `aeac8a3` - feat: Bookmarks, highlights, and notes
+- `aeac8a3` - feat: Bookmarks, highlights, and notes (API)
+- `2da9d7e` - feat: Rating flags infrastructure (Mobile)
+
+### Implementation Plan Update
+- `00f9e71` - docs: Update implementation plan - Phase 6 complete
+
+---
+
+## Mobile App Sync Status
+
+**✅ Fully Synced Features:**
+- Reading progress & streak tracking
+- Category filtering
+- Personalized recommendations
+- Rating flags (infrastructure ready)
+
+**📋 Pending Mobile UI:**
+- Bookmarks UI in page reader
+- Highlights UI in page reader
+- Notes UI in page reader
+- Review list component (needed for flags integration)
+
+**Note**: All API endpoints are implemented. Mobile UI for annotations is documented as follow-up work.
 
 ---
 

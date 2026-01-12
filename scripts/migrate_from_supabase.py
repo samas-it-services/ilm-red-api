@@ -34,14 +34,13 @@ import secrets
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import asyncpg
 import httpx
 from argon2 import PasswordHasher
 from azure.storage.blob import BlobServiceClient, ContentSettings
-from supabase import create_client, Client
+from supabase import Client, create_client
 from tqdm import tqdm
 
 # Paths
@@ -141,7 +140,7 @@ async def connect_source() -> asyncpg.Connection:
 
 async def connect_target(target_url: str) -> asyncpg.Connection:
     """Connect to target PostgreSQL."""
-    print(f"Connecting to target PostgreSQL...")
+    print("Connecting to target PostgreSQL...")
     # Convert SQLAlchemy URL to asyncpg format
     url = target_url.replace("postgresql+asyncpg://", "postgresql://")
     conn = await asyncpg.connect(url)
@@ -569,7 +568,7 @@ async def upload_to_azure(
                         overwrite=True,
                         content_settings=ContentSettings(content_type="image/jpeg"),
                     )
-            except Exception as e:
+            except Exception:
                 # Thumbnails are optional, don't add to errors
                 pass
 

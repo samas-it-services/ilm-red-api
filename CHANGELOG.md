@@ -20,6 +20,49 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🐛 fix: GitHub Actions CI/CD pipeline
+
+### 📄 **Summary**
+Fix failing GitHub Actions workflow by resolving linting errors and improving test setup. Add PostgreSQL readiness check and run migrations before tests to ensure integration tests pass.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `scripts/export_prod_sample_data.py` | Modified | Remove unused variable user_ids (linting fix) |
+| `.github/workflows/deploy.yml` | Modified | Add PostgreSQL wait step and migration step before tests |
+
+### 🧠 **Rationale**
+GitHub Actions CI was failing because:
+1. Linting errors in scripts (unused variables, import ordering)
+2. Integration tests attempted to run before database was ready
+3. Missing migration step caused tests to fail on outdated schema
+
+Adding explicit wait for PostgreSQL and running migrations ensures tests have proper database state.
+
+### 🔄 **Behavior / Compatibility Implications**
+- CI now waits for PostgreSQL to be ready before running tests
+- Migrations run automatically on CI before test execution
+- Linting errors fixed (11 auto-fixed, 1 manual fix)
+- All unit tests passing (21/21)
+
+### 🧪 **Testing Recommendations**
+```bash
+# Verify linting passes
+poetry run ruff check .
+
+# Verify unit tests pass
+poetry run pytest tests/unit/ -v
+
+# Push and verify GitHub Actions succeeds
+git push origin main
+```
+
+### 📌 **Follow‑ups**
+- Monitor GitHub Actions build status
+- Consider splitting unit/integration tests into separate workflows for faster feedback
+
+---
+
 ## 2026-01-12 | 🚀 feat: Rating moderation and analytics for admins
 
 ### 📄 **Summary**

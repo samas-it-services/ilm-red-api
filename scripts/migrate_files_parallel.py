@@ -24,7 +24,7 @@ from threading import Lock
 
 import asyncpg
 from azure.storage.blob import BlobServiceClient, ContentSettings
-from supabase import create_client, Client
+from supabase import Client, create_client
 from tqdm import tqdm
 
 # Paths

@@ -19,9 +19,8 @@ import os
 from pathlib import Path
 
 import asyncpg
-import httpx
 from azure.storage.blob import BlobServiceClient, ContentSettings
-from supabase import create_client, Client
+from supabase import Client, create_client
 from tqdm import tqdm
 
 # Paths

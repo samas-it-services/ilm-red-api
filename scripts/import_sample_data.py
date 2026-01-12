@@ -17,7 +17,6 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

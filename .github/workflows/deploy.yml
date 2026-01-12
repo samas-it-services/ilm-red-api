@@ -65,12 +65,24 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "PostgreSQL is unavailable - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+
       - name: Enable pgvector extension
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d ilmred_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run linting
         run: poetry run ruff check .
+
+      - name: Run migrations
+        run: poetry run alembic upgrade head
 
       - name: Run tests with coverage
         run: |

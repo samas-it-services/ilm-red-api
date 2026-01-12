@@ -119,7 +119,6 @@ async def export_data():
             LIMIT_USERS,
         )
         users_data = [sanitize_user(dict(user)) for user in users]
-        user_ids = [user["id"] for user in users_data]
 
         with open(EXPORT_DIR / "users.json", "w") as f:
             json.dump(users_data, f, indent=2, default=serialize_datetime)
@@ -268,7 +267,7 @@ Example users:
             f.write(readme_content)
 
         print(f"\n✅ Export complete! Data saved to: {EXPORT_DIR}")
-        print(f"\nSummary:")
+        print("\nSummary:")
         print(f"  - {len(books_data)} books")
         print(f"  - {len(users_data)} users")
         print(f"  - {len(ratings_data)} ratings")

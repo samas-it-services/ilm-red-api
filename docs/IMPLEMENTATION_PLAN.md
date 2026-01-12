@@ -36,7 +36,7 @@ This document tracks the implementation of comprehensive enhancements to the ILM
 | 2 | Reading Progress | ✅ Complete | a277ca4, 5b7fada | 16/16 | ✅ Passing |
 | 3 | Rating Moderation | ✅ Complete | ede469c | 21/21 | ❌ Failed |
 | 3.5 | CI/CD Fixes | ✅ Complete | 4a4a7bb | 21/21 | ✅ Passing |
-| 5 | Home & Book Enhancements | 🚧 In Progress | - | - | - |
+| 5 | Home & Book Enhancements | 🚧 Part 1 Done | f7fffd0 | 21/21 | ✅ Passing |
 | 6 | Bookmarks & Annotations | 📋 Pending | - | - | - |
 | 7 | Offline Reading | 📋 Pending | - | - | - |
 | 4 | Error Monitoring | 📋 Deferred | - | - | - |
@@ -199,36 +199,42 @@ This document tracks the implementation of comprehensive enhancements to the ILM
 
 ## Active Phase
 
-### 🚧 Phase 5: Home Page + Book Detail Enhancements
+### ✅ Phase 5: Home Page + Book Detail Enhancements (f7fffd0)
 
-**Status**: In Progress
-**Start Date**: 2026-01-12
+**Status**: ✅ Part 1 Complete (Recommendations)
+**Date**: 2026-01-12
+**Commit**: f7fffd0
+**Files Changed**: 7 files
 
-**Objectives:**
-1. Replace hardcoded home page data with real API data (✅ Partially done in Phase 2)
-2. Implement personalized recommendations algorithm
-3. Add interactive learning features to book detail page
-4. Improve visual design and animations
+**Implementation:**
 
-**Sub-Features:**
-
-**5.1 Personalized Recommendations**
-- Algorithm: Collaborative filtering + content-based
+**5.1 Personalized Recommendations** ✅ DONE
+- Algorithm: Category-based + top-rated + recently added
 - Endpoint: `GET /v1/recommendations/for-you`
-- Files to create:
-  - `app/services/recommendation_service.py`
-  - `app/api/v1/recommendations.py`
-  - `app/schemas/recommendation.py`
+- Files created:
+  - `app/services/recommendation_service.py` - Recommendation algorithm
+  - `app/api/v1/recommendations.py` - API endpoint
+  - `app/schemas/recommendation.py` - Response schema
 
-**5.2 Book Detail Page Extras**
-- Flashcards (AI-generated Q&A)
-- Quiz (comprehension tests)
-- Audio version, Podcasts, YouTube videos
-- Infographics, "Explain to 5-year-old", Key ideas
+**Algorithm Details:**
+- 40% weight: Books in categories user has been reading
+- 30% weight: Top-rated books user hasn't read (min 3 ratings)
+- 30% weight: Recently added popular books
+- Each recommendation includes personalized reason
 
-**Database Migration**: `book_extras` table
-**Expected Tests**: ~10 unit tests
-**Expected Files**: 10+ new files
+**5.2 Book Detail Page Extras** 🚧 IN PROGRESS
+- Database migration created: `book_extras` table
+- Supports: flashcards, quiz, audio, podcast, video, infographic, simple_explanation, key_ideas
+- API endpoints and mobile UI pending
+
+**Tests**: 21/21 unit tests passing
+**CHANGELOG**: 2026-01-12 | feat: Personalized book recommendations (Phase 5 Part 1)
+
+**Remaining Work:**
+- Book extras API (CRUD endpoints)
+- AI generation endpoints (flashcards, quiz, key ideas)
+- Mobile home page recommendations section
+- Mobile book detail extras UI
 
 ---
 
@@ -408,6 +414,10 @@ Each phase is considered complete when:
 
 ### Phase 3.5: CI Fixes
 - `4a4a7bb` - fix: GitHub Actions CI pipeline
+
+### Phase 5: Home & Book Enhancements (Part 1)
+- `5a601f9` - docs: Update implementation plan with Phase 0-3 progress
+- `f7fffd0` - feat: Personalized book recommendations
 
 ---
 

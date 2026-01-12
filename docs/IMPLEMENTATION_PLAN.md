@@ -36,8 +36,9 @@ This document tracks the implementation of comprehensive enhancements to the ILM
 | 2 | Reading Progress | ✅ Complete | a277ca4, 5b7fada | 16/16 | ✅ Passing |
 | 3 | Rating Moderation | ✅ Complete | ede469c | 21/21 | ❌ Failed |
 | 3.5 | CI/CD Fixes | ✅ Complete | 4a4a7bb | 21/21 | ✅ Passing |
-| 5 | Home & Book Enhancements | ✅ Complete | f7fffd0, 9f44715 | 21/21 | ✅ Passing |
-| 6 | Bookmarks & Annotations | 📋 Pending | - | - | - |
+| 5 | Home & Book Enhancements | ✅ Complete | f7fffd0, 9f44715, d8053bc | 21/21 | ✅ Passing |
+| 5.1 | CI Fixes & Mobile Sync | ✅ Complete | 793bd66, dcb4ad0 | 21/21 | ✅ Passing |
+| 6 | Bookmarks & Annotations | ✅ Complete | aeac8a3 | 21/21 | ✅ Passing |
 | 7 | Offline Reading | 📋 Pending | - | - | - |
 | 4 | Error Monitoring | 📋 Deferred | - | - | - |
 
@@ -420,6 +421,12 @@ Each phase is considered complete when:
 - `f7fffd0` - feat: Personalized book recommendations
 - `04d36ce` - docs: Update implementation plan with Phase 5 Part 1 progress
 - `9f44715` - feat: Add cache hydration endpoint and fix linting
+- `d8053bc` - fix: Simplify cache hydration to avoid CI test failures
+- `793bd66` - fix: Integration test teardown with CASCADE and pgvector recreation
+- `dcb4ad0` - feat: Add personalized recommendations to home page (mobile)
+
+### Phase 6: Bookmarks, Highlights, Notes
+- `aeac8a3` - feat: Bookmarks, highlights, and notes
 
 ---
 

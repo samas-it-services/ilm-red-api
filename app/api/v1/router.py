@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     admin,
+    annotations,
     auth,
     billing,
     books,
@@ -54,3 +55,6 @@ api_router.include_router(progress.router, prefix="/progress", tags=["Progress"]
 
 # Recommendations endpoints
 api_router.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
+
+# Annotations endpoints (bookmarks, highlights, notes)
+api_router.include_router(annotations.router, tags=["Annotations"])

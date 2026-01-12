@@ -391,6 +391,44 @@ curl /v1/recommendations/for-you?limit=10 \\
 **Note:** Recommendations require authentication and reading history for personalization.
         """,
     },
+    {
+        "name": "Annotations",
+        "description": """
+**Bookmarks, Highlights & Notes**
+
+Annotate books with bookmarks, highlights, and notes that sync across devices.
+
+**Features:**
+
+**Bookmarks** - Mark pages for quick access
+- One bookmark per page
+- Optional note and color
+- GET/POST/DELETE /v1/books/{book_id}/bookmarks
+
+**Highlights** - Highlight text within pages
+- Position tracking (x, y, width, height)
+- Custom colors (#FFFF00, #00FF00, etc.)
+- Optional notes
+- GET/POST/PUT/DELETE /v1/books/{book_id}/highlights
+
+**Notes** - Write notes on pages or entire books
+- Page-specific or book-level notes (page_number = null)
+- Rich text content
+- Optional colors
+- GET/POST/PUT/DELETE /v1/books/{book_id}/notes
+
+**Cross-Device Sync:**
+All annotations sync automatically across devices when you're signed in.
+
+**Example:**
+```bash
+# Add bookmark to page 42
+curl -X POST /v1/books/{book_id}/bookmarks \\
+  -H "Authorization: Bearer <token>" \\
+  -d '{"page_number": 42, "note": "Important chapter"}'
+```
+        """,
+    },
 ]
 
 # Rich API description with getting started guide

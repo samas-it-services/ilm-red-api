@@ -20,6 +20,73 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🚀 feat: Bookmarks, highlights, and notes (Phase 6)
+
+### 📄 **Summary**
+Add comprehensive annotation system allowing users to bookmark pages, highlight text, and write notes. All annotations sync across devices and are tied to user accounts.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/models/annotation.py` | Added | Bookmark, Highlight, Note models |
+| `app/schemas/annotation.py` | Added | Annotation request/response schemas |
+| `app/repositories/annotation_repo.py` | Added | Annotation data access layer |
+| `app/services/annotation_service.py` | Added | Annotation business logic |
+| `app/api/v1/annotations.py` | Added | 9 annotation endpoints |
+| `app/api/v1/router.py` | Modified | Register annotations router |
+| `app/main.py` | Modified | Add Annotations OpenAPI documentation |
+| `app/db/migrations/versions/20260112_1610_*.py` | Added | Bookmarks, highlights, notes tables |
+
+### 🧠 **Rationale**
+Readers need to annotate books for study, reference, and comprehension. Bookmarks help navigate large books, highlights mark important passages, and notes capture thoughts. Cross-device sync ensures annotations are available everywhere.
+
+### 🔄 **Behavior / Compatibility Implications**
+**Bookmarks**:
+- GET/POST/DELETE /v1/books/{book_id}/bookmarks
+- One bookmark per page per user
+- Optional note and color
+
+**Highlights**:
+- GET/POST/PUT/DELETE /v1/books/{book_id}/highlights
+- Stores text content and position (x, y, width, height)
+- Custom colors, optional notes
+
+**Notes**:
+- GET/POST/PUT/DELETE /v1/books/{book_id}/notes
+- Page-specific or book-level (page_number = null)
+- Rich text content up to 10,000 chars
+
+All annotations sync across devices automatically.
+
+### 🧪 **Testing Recommendations**
+```bash
+# Create bookmark
+curl -X POST http://localhost:8000/v1/books/{book_id}/bookmarks \
+  -H "Authorization: Bearer <token>" \
+  -d '{"page_number": 42, "note": "Important chapter", "color": "#FF0000"}'
+
+# Get bookmarks
+curl http://localhost:8000/v1/books/{book_id}/bookmarks \
+  -H "Authorization: Bearer <token>"
+
+# Create highlight
+curl -X POST http://localhost:8000/v1/books/{book_id}/highlights \
+  -H "Authorization: Bearer <token>" \
+  -d '{"page_number": 10, "text_content": "Important text", "position": {"x": 100, "y": 200, "width": 300, "height": 50}, "color": "#FFFF00"}'
+
+# Create note
+curl -X POST http://localhost:8000/v1/books/{book_id}/notes \
+  -H "Authorization: Bearer <token>" \
+  -d '{"page_number": 5, "content": "My thoughts on this chapter"}'
+```
+
+### 📌 **Follow‑ups**
+- Add mobile UI for annotations in page reader
+- Implement highlight rendering on page images
+- Add bookmark sidebar navigation
+
+---
+
 ## 2026-01-12 | 🚀 feat: Personalized book recommendations (Phase 5 Part 1)
 
 ### 📄 **Summary**

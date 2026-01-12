@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import admin, auth, billing, books, cache, chat, files, health, search, users
+from app.api.v1 import admin, auth, billing, books, cache, chat, files, health, progress, search, users
 
 api_router = APIRouter()
 
@@ -36,6 +36,5 @@ api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 # Search endpoints
 api_router.include_router(search.router, prefix="/search", tags=["Search"])
 
-# Future endpoints (to be added in later phases)
-# api_router.include_router(ai.router, prefix="/ai", tags=["AI"])
-# api_router.include_router(progress.router, prefix="/progress", tags=["Progress"])
+# Reading progress endpoints
+api_router.include_router(progress.router, prefix="/progress", tags=["Progress"])

@@ -20,6 +20,58 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🚀 feat: Reading progress tracking with cross-device sync
+
+### 📄 **Summary**
+Add reading progress tracking system that records user's current page, reading time, and calculates reading streaks. Progress syncs across devices and persists in database.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/models/progress.py` | Added | ReadingProgress model with streak calculation |
+| `app/schemas/progress.py` | Added | Progress request/response schemas |
+| `app/repositories/progress_repo.py` | Added | Progress data access with streak logic |
+| `app/services/progress_service.py` | Added | Progress business logic |
+| `app/api/v1/progress.py` | Added | Progress API endpoints |
+| `app/api/v1/router.py` | Modified | Register progress router |
+| `app/db/migrations/versions/20260112_0819_*.py` | Added | Database migration for reading_progress table |
+| `tests/unit/test_progress_service.py` | Added | Unit tests for progress calculations |
+
+### 🧠 **Rationale**
+Users need cross-device reading progress sync and motivation through reading streaks. Progress tracking enables:
+- Resume reading from last page on any device
+- Reading streaks to encourage daily reading
+- Reading time statistics
+- Completed books tracking
+
+### 🔄 **Behavior / Compatibility Implications**
+- New endpoints: GET/PUT /v1/books/{id}/progress, GET /v1/progress/recent, GET /v1/progress/stats
+- Progress auto-updates as users read
+- Streak calculated from consecutive days with reading activity
+- Reading time accumulates per book
+
+### 🧪 **Testing Recommendations**
+```bash
+# Run unit tests
+poetry run pytest tests/unit/test_progress_service.py -v
+
+# Test progress tracking
+curl -X PUT http://localhost:8000/v1/books/{book_id}/progress \
+  -H "Authorization: Bearer <token>" \
+  -d '{"current_page": 42, "total_pages": 350, "reading_time_seconds": 120}'
+
+# Get reading stats
+curl http://localhost:8000/v1/books/{book_id}/progress \
+  -H "Authorization: Bearer <token>"
+```
+
+### 📌 **Follow‑ups**
+- Run database migration: poetry run alembic upgrade head
+- Monitor progress update performance
+- Consider adding progress analytics to admin panel
+
+---
+
 ## 2026-01-12 | 🐛 fix: Critical admin schema bug and category filter
 
 ### 📄 **Summary**

@@ -312,6 +312,33 @@ Serves files from local storage with signed URL validation.
 **Note:** Development only - In production, files are served directly from Azure Blob Storage CDN.
         """,
     },
+    {
+        "name": "Progress",
+        "description": """
+**Reading Progress Tracking**
+
+Track your reading progress with cross-device sync.
+
+**Features:**
+- Auto-save current page as you read
+- Reading streak calculation (consecutive days)
+- Reading time tracking per book
+- Recent reads list for quick resume
+- Progress statistics (books started, completed, time spent)
+
+**Progress Updates:**
+Progress is automatically updated when reading pages. You can also manually update it:
+
+```bash
+curl -X PUT /v1/books/{book_id}/progress \\
+  -H "Authorization: Bearer <token>" \\
+  -d '{"current_page": 42, "total_pages": 350, "reading_time_seconds": 120}'
+```
+
+**Reading Streaks:**
+Streak increases for each consecutive day with reading activity. Skip a day and your streak resets!
+        """,
+    },
 ]
 
 # Rich API description with getting started guide

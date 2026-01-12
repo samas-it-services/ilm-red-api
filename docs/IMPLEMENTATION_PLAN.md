@@ -4,298 +4,417 @@
 
 | Field | Value |
 |-------|-------|
-| **Feature** | Page-First Reading + AI Chunks |
-| **Last Updated** | 2026-01-09 |
-| **Current Phase** | Phase 1 - Database Models |
+| **Project** | ILM Red API Enhancement Initiative |
+| **Last Updated** | 2026-01-12 |
+| **Current Phase** | Phase 5 - Home Page & Book Detail Enhancements |
 | **Status** | In Progress |
+| **GitHub Actions** | ✅ PASSING |
 
 ---
 
 ## Overview
 
-This document tracks the implementation of the Page-First Reading Platform with AI Chunks feature. The feature enables:
+This document tracks the implementation of comprehensive enhancements to the ILM Red API and mobile app. The initiative spans multiple feature areas including bug fixes, reading progress, rating moderation, home page improvements, annotations, and offline support.
 
-1. **Page Browsing** - Users can view PDF pages as images without downloading entire files
-2. **AI Chunks** - Book text is chunked and embedded for semantic search
-3. **RAG Integration** - AI chat includes relevant book context with page citations
-
----
-
-## Core Principles
-
-| # | Principle | Description |
-|---|-----------|-------------|
-| P1 | Pages are for **rendering** | Users browse visually through page images |
-| P2 | Chunks are for **thinking** | AI uses text chunks for understanding |
-| P3 | API orchestrates, storage serves | No large media streamed through API |
-| P4 | Start simple, iterate fast | MVP first, enhance later |
+**Key Objectives:**
+1. Fix critical bugs blocking admin features
+2. Add reading progress tracking with cross-device sync
+3. Implement rating moderation and analytics
+4. Enhance home page with personalized recommendations
+5. Add bookmarks, highlights, and notes
+6. Enable offline reading support
+7. Implement error monitoring and integrations (deferred to end)
 
 ---
 
-## Progress
+## Implementation Progress
 
-| Phase | Description | Status | Files |
-|-------|-------------|--------|-------|
-| 0 | Documentation | Completed | PRD.md, TDD.md, IMPLEMENTATION_PLAN.md, README.md, api-v1.yaml |
-| 1 | Database Models & Migration | In Progress | `app/models/page.py`, migration |
-| 2 | Schemas | Pending | `app/schemas/page.py` |
-| 3 | PDF Processing Service | Pending | `app/services/pdf_processor.py` |
-| 4 | Chunking Service | Pending | `app/services/chunking_service.py` |
-| 5 | Page Service | Pending | `app/services/page_service.py` |
-| 6 | Embedding Service | Pending | `app/services/embedding_service.py` |
-| 7 | Page Repository | Pending | `app/repositories/page_repo.py` |
-| 8 | API Endpoints | Pending | `app/api/v1/pages.py` |
-| 9 | Chat RAG Integration | Pending | `app/services/chat_service.py` (modify) |
-| 10 | Dependencies & Config | Pending | `pyproject.toml`, `app/config.py` |
+| Phase | Description | Status | Commits | Tests | CI Status |
+|-------|-------------|--------|---------|-------|-----------|
+| 0 | Sample Data Export | ✅ Complete | dcaaef5 | - | ✅ Passing |
+| 1 | Critical Bug Fixes | ✅ Complete | b4c8c47, bb8378e | 8/8 | ✅ Passing |
+| 2 | Reading Progress | ✅ Complete | a277ca4, 5b7fada | 16/16 | ✅ Passing |
+| 3 | Rating Moderation | ✅ Complete | ede469c | 21/21 | ❌ Failed |
+| 3.5 | CI/CD Fixes | ✅ Complete | 4a4a7bb | 21/21 | ✅ Passing |
+| 5 | Home & Book Enhancements | 🚧 In Progress | - | - | - |
+| 6 | Bookmarks & Annotations | 📋 Pending | - | - | - |
+| 7 | Offline Reading | 📋 Pending | - | - | - |
+| 4 | Error Monitoring | 📋 Deferred | - | - | - |
 
 ---
 
-## Phase Details
+## Completed Phases
 
-### Phase 0: Documentation (Completed)
+### ✅ Phase 0: Sample Data Export (dcaaef5)
 
-- [x] Update PRD.md with Main Features table
-- [x] Add FR-PAGE-007 (AI Text Chunks) requirements
-- [x] Add FR-PAGE-008 (RAG Integration) requirements
-- [x] Update TDD.md with Section 15: Page System Design
-- [x] Create IMPLEMENTATION_PLAN.md
-- [x] Update README.md with development status
-- [x] Update openapi/api-v1.yaml with page endpoints
+**Date**: 2026-01-12
+**Files Changed**: 4 files, 672 insertions
 
-### Phase 1: Database Models & Migration
+**Implementation:**
+- Created `scripts/export_prod_sample_data.py` - Export sanitized data from Azure PostgreSQL
+- Created `scripts/import_sample_data.py` - Import data to local database
+- Exported 50 books, 20 users, ratings, favorites, chat sessions
+- All PII sanitized (passwords → "test123", emails → @test.com)
 
-**Goal:** Create SQLAlchemy models and Alembic migration.
+**Benefits:**
+- Realistic testing with production data structure
+- Schema compatibility verification
+- Complex relationships for better testing
 
-**Files:**
-- `app/models/page.py` - PageImage and TextChunk models
-- `app/db/migrations/versions/20260109_0006_pages_chunks.py` - Migration
+**CHANGELOG**: 2026-01-12 | chore: Add Sample Data Export/Import Scripts
 
-**Models:**
+---
 
-```python
-# PageImage - Stores page image metadata
-class PageImage(Base):
-    __tablename__ = "page_images"
-    id: UUID
-    book_id: UUID (FK → books)
-    page_number: int
-    width: int
-    height: int
-    thumbnail_path: str
-    medium_path: str
-    created_at: datetime
+### ✅ Phase 1: Critical Bug Fixes (b4c8c47, bb8378e)
 
-# TextChunk - Stores chunked text with embeddings
-class TextChunk(Base):
-    __tablename__ = "text_chunks"
-    id: UUID
-    book_id: UUID (FK → books)
-    chunk_index: int
-    text: str
-    token_count: int
-    page_start: int
-    page_end: int
-    embedding: Vector(1536)
-    created_at: datetime
-```
+**Date**: 2026-01-12
+**API Commit**: b4c8c47
+**Mobile Commit**: bb8378e
+**Files Changed**: 7 files (API + Mobile)
 
-**Database Requirements:**
-- Enable pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector;`
+**Bugs Fixed:**
 
-### Phase 2: Schemas
+1. **Admin Schema Field Mismatch** (CRITICAL)
+   - Fixed `is_public` → `visibility` in `app/schemas/admin.py`
+   - Fixed `pages_count` → `page_count`
+   - Updated `app/api/v1/admin.py` queries
+   - Added unit tests (`tests/unit/test_admin_schemas.py`)
 
-**Goal:** Create Pydantic request/response schemas.
+2. **Cache Invalidation**
+   - Added auto-invalidation on book create/update/delete
+   - Modified `app/services/book_service.py`
 
-**Files:**
-- `app/schemas/page.py`
-- `app/schemas/__init__.py` (modify)
+3. **Category Filter Bug** (Mobile)
+   - Aligned mobile categories with API
+   - Updated `constants/categories.ts` with Islamic categories (quran, hadith, seerah, fiqh, aqidah, tafsir)
 
-**Schemas:**
-- `PageMetadata` - Single page info
-- `PageListResponse` - List of pages
-- `PageDetailResponse` - Page with signed URLs
-- `PageGenerationResponse` - Generation result
-- `ChunkResponse` - Single chunk info
-- `BookChunksResponse` - List of chunks
+**Tests**: 8/8 unit tests passing
+**CHANGELOG**: 2026-01-12 | fix: Critical admin schema bug and category filter
 
-### Phase 3: PDF Processing Service
+---
 
-**Goal:** Extract pages and text from PDFs using PyMuPDF.
+### ✅ Phase 2: Reading Progress Tracking (a277ca4, 5b7fada)
 
-**Files:**
-- `app/services/pdf_processor.py`
+**Date**: 2026-01-12
+**API Commit**: a277ca4
+**Mobile Commit**: 5b7fada
+**Files Changed**: 14 files (API + Mobile)
+
+**Implementation:**
+
+**Database** (`20260112_0819_e042ea7f0764_add_reading_progress.py`):
+- ReadingProgress model
+- Tracks: current_page, progress_percent, reading_time_seconds, streak
+- Unique constraint per user-book pair
+- Indexed for performance
+
+**API** (5 new endpoints):
+- `GET /v1/books/{id}/progress` - Get progress
+- `PUT /v1/books/{id}/progress` - Update progress
+- `DELETE /v1/books/{id}/progress` - Reset progress
+- `GET /v1/progress/recent` - Recent reads
+- `GET /v1/progress/stats` - Reading stats with streak
+
+**Mobile** (Expo):
+- Created `hooks/useProgress.ts` with React Query hooks
+- Modified `app/book/[id]/read/[page].tsx` - Auto-update progress (debounced 2s)
+- Modified `app/(tabs)/index.tsx` - Display real progress/streak
 
 **Features:**
-- Render page to JPEG at specified resolution
-- Extract text from pages
-- Pure Python (no system dependencies)
+- Cross-device sync
+- Reading streak calculation (consecutive days)
+- Reading time accumulation
+- Completion tracking
 
-### Phase 4: Chunking Service
+**Tests**: 16/16 unit tests passing
+**CHANGELOG**: 2026-01-12 | feat: Reading progress tracking with cross-device sync
 
-**Goal:** Split book text into AI-friendly chunks.
+---
 
-**Files:**
-- `app/services/chunking_service.py`
+### ✅ Phase 3: Rating Moderation & Analytics (ede469c)
 
-**Parameters:**
-- Max tokens: 500
-- Overlap: 50 tokens
-- Encoder: tiktoken cl100k_base
+**Date**: 2026-01-12
+**Commit**: ede469c
+**Files Changed**: 24 files
 
-### Phase 5: Page Service
+**Implementation:**
 
-**Goal:** Orchestrate page generation and retrieval.
+**Database** (`20260112_0837_d235eb0c7902_add_rating_flags.py`):
+- RatingFlag model for user reports
+- Reasons: spam, offensive, irrelevant, other
+- Status tracking: pending, reviewed, dismissed
+- Unique constraint per reporter-rating pair
 
-**Files:**
-- `app/services/page_service.py`
+**Admin API** (3 new endpoints):
+- `GET /v1/admin/ratings` - List all ratings with filtering
+- `DELETE /v1/admin/ratings/{id}` - Delete inappropriate ratings
+- `GET /v1/admin/analytics/ratings` - Comprehensive analytics
 
-**Methods:**
-- `generate_pages_and_chunks(book_id)` - Main pipeline
-- `get_page_list(book_id)` - List pages with thumbnails
-- `get_page_detail(book_id, page_number)` - Get page URLs
+**User API**:
+- `POST /v1/books/{book_id}/ratings/{rating_id}/flag` - Flag rating
 
-### Phase 6: Embedding Service
+**Analytics:**
+- Rating distribution (1-5 stars)
+- Top-rated books (min 3 ratings)
+- Most reviewed books
+- Flagged rating count
 
-**Goal:** Generate embeddings using OpenAI.
+**Bug Fixes:**
+- Fixed admin stats endpoint field names (visibility, page_count)
 
-**Files:**
-- `app/services/embedding_service.py`
+**Tests**: 21/21 unit tests passing
+**CHANGELOG**: 2026-01-12 | feat: Rating moderation and analytics for admins
 
-**Model:** text-embedding-3-small (1536 dimensions)
+---
 
-### Phase 7: Page Repository
+### ✅ Phase 3.5: GitHub Actions CI Fixes (4a4a7bb)
 
-**Goal:** Data access layer for pages and chunks.
+**Date**: 2026-01-12
+**Commit**: 4a4a7bb
+**Files Changed**: 8 files
 
-**Files:**
-- `app/repositories/page_repo.py`
-- `app/repositories/__init__.py` (modify)
+**Fixes:**
+- Removed unused variable `user_ids` (linting error)
+- Auto-fixed 11 import/formatting issues
+- Added PostgreSQL readiness check to CI workflow
+- Added migration step before tests
 
-**Methods:**
-- CRUD for PageImage
-- CRUD for TextChunk
-- `search_similar_chunks(book_id, embedding, limit)` - pgvector search
+**CI Improvements**:
+```yaml
+- name: Wait for PostgreSQL to be ready
+  run: until pg_isready ...; done
 
-### Phase 8: API Endpoints
+- name: Run migrations
+  run: poetry run alembic upgrade head
 
-**Goal:** Expose page functionality via REST API.
-
-**Files:**
-- `app/api/v1/pages.py`
-- `app/api/v1/router.py` (modify)
-
-**Endpoints:**
-- `GET /v1/books/{bookId}/pages` - List pages
-- `GET /v1/books/{bookId}/pages/{pageNumber}` - Get page detail
-- `POST /v1/books/{bookId}/pages/generate` - Trigger generation
-
-### Phase 9: Chat RAG Integration
-
-**Goal:** Enhance chat with book context.
-
-**Files:**
-- `app/services/chat_service.py` (modify)
-
-**Changes:**
-- Add `get_book_context()` method
-- Modify message handling to include RAG context
-- Track RAG tokens in billing
-
-### Phase 10: Dependencies & Config
-
-**Goal:** Add required packages and configuration.
-
-**Files:**
-- `pyproject.toml` (add pymupdf, pgvector, tiktoken)
-- `app/config.py` (add page settings)
-
-**New Dependencies:**
-```toml
-pymupdf = "^1.24.0"
-pgvector = "^0.2.4"
-tiktoken = "^0.5.0"
+- name: Run tests
+  run: poetry run pytest tests/ --junitxml=test-results.xml
 ```
 
----
-
-## API Endpoints Summary
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/v1/books/{id}/pages` | List pages with thumbnail URLs |
-| GET | `/v1/books/{id}/pages/{num}` | Get page with signed URLs |
-| POST | `/v1/books/{id}/pages/generate` | Generate pages + chunks |
+**Result**: GitHub Actions now passing ✅
+**Build**: https://github.com/samas-it-services/ilm-red-api/actions/runs/20917785620
+**CHANGELOG**: 2026-01-12 | fix: GitHub Actions CI/CD pipeline
 
 ---
 
-## MVP Scope
+## Active Phase
 
-### In Scope
-- PDF books only
-- 2 image resolutions (thumbnail 150px, medium 800px)
-- Synchronous generation (< 100 pages)
-- AI chunks with embeddings (pgvector)
-- Chat RAG integration
-- Direct Azure Blob URLs (no CDN)
+### 🚧 Phase 5: Home Page + Book Detail Enhancements
 
-### Out of Scope (Future)
-- EPUB/TXT support
-- High-res/ultra resolutions
-- CDN integration
-- Background job queue
-- Async generation progress
+**Status**: In Progress
+**Start Date**: 2026-01-12
+
+**Objectives:**
+1. Replace hardcoded home page data with real API data (✅ Partially done in Phase 2)
+2. Implement personalized recommendations algorithm
+3. Add interactive learning features to book detail page
+4. Improve visual design and animations
+
+**Sub-Features:**
+
+**5.1 Personalized Recommendations**
+- Algorithm: Collaborative filtering + content-based
+- Endpoint: `GET /v1/recommendations/for-you`
+- Files to create:
+  - `app/services/recommendation_service.py`
+  - `app/api/v1/recommendations.py`
+  - `app/schemas/recommendation.py`
+
+**5.2 Book Detail Page Extras**
+- Flashcards (AI-generated Q&A)
+- Quiz (comprehension tests)
+- Audio version, Podcasts, YouTube videos
+- Infographics, "Explain to 5-year-old", Key ideas
+
+**Database Migration**: `book_extras` table
+**Expected Tests**: ~10 unit tests
+**Expected Files**: 10+ new files
 
 ---
 
-## Performance Targets
+## Pending Phases
 
-| Metric | Target |
-|--------|--------|
-| Page generation | < 30s for 50-page PDF |
-| Thumbnail load | < 200ms |
-| RAG retrieval | < 500ms for 5 chunks |
-| Embedding generation | < 2s per chunk |
+### 📋 Phase 6: Bookmarks, Highlights, Notes
+
+**Status**: Pending
+**Dependencies**: Phase 5 complete
+
+**Features:**
+- Bookmark pages
+- Highlight text within pages
+- Add notes to pages or books
+- Cross-device sync
+
+**Database**: 3 new tables (bookmarks, highlights, notes)
+**API**: 9 new endpoints
+**Mobile**: Enhanced page reader UI
 
 ---
 
-## Deployment Verification
+### 📋 Phase 7: Offline Reading Support
 
-After each implementation phase:
+**Status**: Pending
+**Dependencies**: Phase 6 complete
 
-### Local Verification
-```bash
-# 1. Install dependencies
-poetry install
+**Features:**
+- Download books for offline access
+- Encrypted local storage
+- Offline annotation support
+- Sync queue for changes
 
-# 2. Run migrations
-poetry run alembic upgrade head
+**Mobile-Only**: No backend changes needed
+**Storage**: expo-file-system + expo-crypto
 
-# 3. Start server
-./scripts/dev.sh
+---
 
-# 4. Verify Swagger
-open http://localhost:8000/docs
+### 📋 Phase 4: Error Monitoring + Integrations (DEFERRED)
 
-# 5. Test endpoints
-curl http://localhost:8000/v1/books/{book_id}/pages
-```
+**Status**: Deferred to end
+**Rationale**: Implement user features first, monitor after deployment
 
-### Azure Verification
-```bash
-# 1. Deploy
-./scripts/deploy-azure.sh prod --app-only
+**Features:**
+- Error logging to database
+- Audit logging for admin actions
+- Azure Application Insights integration
+- DataDog integration (free tier)
+- Admin error dashboard
 
-# 2. Verify health
-curl https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/health
+**Database**: 2 new tables (error_logs, audit_logs)
 
-# 3. Verify Swagger
-open https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io/docs
-```
+---
+
+## Metrics & Success Criteria
+
+### Phase Completion Criteria
+
+Each phase is considered complete when:
+- ✅ All essential unit tests passing
+- ✅ CHANGELOG updated with rationale and testing steps
+- ✅ Code committed and pushed to GitHub
+- ✅ GitHub Actions CI passing
+- ✅ IMPLEMENTATION_PLAN.md updated with status
+
+### Coverage Targets
+
+- **Unit Tests**: 80%+ for services, 70%+ for repositories
+- **Integration Tests**: Documented for later implementation
+- **Overall Coverage**: 70%+ (currently tracking via pytest-cov)
+
+### Current Test Status
+
+**Total Unit Tests**: 21/21 passing
+**Test Breakdown**:
+- Admin schemas: 8 tests
+- Progress service: 8 tests
+- Rating analytics: 5 tests
+
+**Integration Tests**: 29 tests exist (database connection issues locally, pass on CI)
+
+---
+
+## Technical Decisions
+
+### Database
+
+**PostgreSQL 16** with pgvector extension
+- Migrations: Alembic (currently at revision d235eb0c7902)
+- Test database: Auto-created/dropped per test function
+- CI database: PostgreSQL service with health checks
+
+### Caching
+
+**Redis** for search results
+- Two-tier caching (public cached, private fresh)
+- Auto-invalidation on book mutations
+- 5min TTL for search, 10min for suggestions
+
+### Testing Strategy (Revised)
+
+**Unit Tests** (implement now):
+- Fast, isolated, no database
+- Test business logic, calculations, validations
+- Required for CI to pass
+
+**Integration Tests** (existing, pass on CI):
+- Full API endpoint tests
+- Database transactions
+- Authentication flows
+
+---
+
+## Deployment Notes
+
+### Current Deployment
+
+**Production**: Azure Container Apps (West US 2)
+- API URL: https://ilmred-prod-api.braverock-f357973c.westus2.azurecontainerapps.io
+- Auto-deploy on push to main (via GitHub Actions)
+- Migrations run automatically on CI
+
+### Migration Status
+
+**Completed Migrations**:
+1. `20250107_0001_initial_users.py` - Users, API keys
+2. `20250107_0002_books.py` - Books, ratings, favorites
+3. `20260109_0003_chat_sessions.py` - Chat
+4. `20260109_0004_billing.py` - Credits, transactions
+5. `20260109_0005_safety.py` - Safety flags
+6. `20260109_0006_pages_chunks.py` - Pages, chunks
+7. `20260110_0007_user_extra_data.py` - User extra_data
+8. `20260112_0819_e042ea7f0764_add_reading_progress.py` - Reading progress
+9. `20260112_0837_d235eb0c7902_add_rating_flags.py` - Rating flags
+
+**Pending Migrations** (created but not yet run):
+- `20260112_1138_899e61d96330_add_error_and_audit_logs.py` - Error/audit logs (Phase 4, deferred)
 
 ---
 
 ## Related Documentation
 
-- [PRD.md](./PRD.md) - Product requirements (Section 4.11)
-- [TDD.md](./TDD.md) - Technical design (Section 15)
-- [OpenAPI](../openapi/api-v1.yaml) - API specification
+- [PRD.md](./PRD.md) - Product requirements
+- [TDD.md](./TDD.md) - Technical design
+- [CHANGELOG.md](../CHANGELOG.md) - Detailed change history
+- [README.md](../README.md) - Project overview
+- [ADMIN_API.md](./ADMIN_API.md) - Admin API documentation
+
+---
+
+## Next Steps
+
+1. **Complete Phase 5**: Home page enhancements + book detail extras
+2. **Complete Phase 6**: Bookmarks, highlights, notes
+3. **Complete Phase 7**: Offline reading support
+4. **Complete Phase 4**: Error monitoring (deferred)
+5. **Update PRD/TDD**: Mark all implemented features
+6. **Production deployment**: Deploy final version with all migrations
+
+---
+
+## Commit History
+
+### Phase 0: Sample Data
+- `dcaaef5` - chore: Add sample data export/import scripts
+
+### Phase 1: Bug Fixes
+- `b4c8c47` - fix: Critical admin schema bug and cache invalidation
+- `bb8378e` - fix: Align categories with API backend (mobile)
+
+### Phase 2: Reading Progress
+- `a277ca4` - feat: Reading progress tracking with cross-device sync
+- `5b7fada` - feat: Real reading progress and streak tracking (mobile)
+
+### Phase 3: Rating Moderation
+- `ede469c` - feat: Rating moderation and analytics for admins
+
+### Phase 3.5: CI Fixes
+- `4a4a7bb` - fix: GitHub Actions CI pipeline
+
+---
+
+## Contact & Support
+
+For questions about this implementation plan:
+- Check CHANGELOG.md for detailed rationale
+- Review commit messages for technical details
+- See docs/PRD.md for feature requirements
+- See docs/TDD.md for architecture decisions

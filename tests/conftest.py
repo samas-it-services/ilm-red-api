@@ -52,6 +52,8 @@ async def db_engine():
         await conn.execute(text("CREATE SCHEMA public"))
         await conn.execute(text("GRANT ALL ON SCHEMA public TO postgres"))
         await conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
+        # Recreate pgvector extension after schema recreation
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
     await engine.dispose()
 

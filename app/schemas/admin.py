@@ -83,17 +83,17 @@ class AdminBookResponse(BaseModel):
 
     id: UUID
     title: str
-    author: str | None
-    description: str | None
-    category: str | None
-    cover_url: str | None
-    file_url: str | None
-    is_public: bool
+    author: str | None = None
+    description: str | None = None
+    category: str | None = None
+    cover_url: str | None = None
+    file_url: str | None = None
+    visibility: Literal["public", "private", "friends"]
     owner_id: UUID
     owner_username: str | None = None
-    pages_count: int
-    average_rating: float | None
-    ratings_count: int
+    page_count: int | None = None
+    average_rating: float | None = None
+    ratings_count: int = 0
     processing_status: Literal["pending", "processing", "ready", "failed"] = "ready"
     created_at: datetime
     updated_at: datetime | None = None
@@ -110,7 +110,9 @@ class AdminBookListParams(BaseModel):
     )
     category: str | None = Field(default=None, description="Filter by category")
     owner_id: UUID | None = Field(default=None, description="Filter by owner")
-    is_public: bool | None = Field(default=None, description="Filter by visibility")
+    visibility: Literal["public", "private", "friends"] | None = Field(
+        default=None, description="Filter by visibility"
+    )
     has_pages: bool | None = Field(
         default=None,
         description="Filter by whether book has pages generated",

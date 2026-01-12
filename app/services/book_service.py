@@ -8,6 +8,7 @@ import structlog
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache.redis_client import RedisCache
 from app.config import settings
 from app.models.book import Book, Rating
 from app.models.user import User
@@ -85,6 +86,21 @@ class BookService:
         self.db = db
         self.repo = BookRepository(db)
         self.storage = get_storage_provider()
+
+    async def _invalidate_search_cache(self) -> None:
+        """Invalidate search cache after book mutations."""
+        try:
+            redis_client = await RedisCache.get_client()
+            if redis_client:
+                # Delete all search-related cache keys
+                deleted = await redis_client.delete(*[
+                    key async for key in redis_client.scan_iter("search:*")
+                ])
+                if deleted > 0:
+                    logger.info("search_cache_invalidated", keys_deleted=deleted)
+        except Exception as e:
+            # Log but don't fail the operation if cache invalidation fails
+            logger.warning("search_cache_invalidation_failed", error=str(e))
 
     async def upload_book(
         self,
@@ -200,6 +216,9 @@ class BookService:
         )
 
         await self.db.commit()
+
+        # Invalidate search cache
+        await self._invalidate_search_cache()
 
         logger.info(
             "Book uploaded",
@@ -382,6 +401,8 @@ class BookService:
         if update_data:
             book = await self.repo.update(book, **update_data)
             await self.db.commit()
+            # Invalidate search cache
+            await self._invalidate_search_cache()
 
         return self._book_to_response(book)
 
@@ -415,6 +436,9 @@ class BookService:
 
         await self.repo.soft_delete(book)
         await self.db.commit()
+
+        # Invalidate search cache
+        await self._invalidate_search_cache()
 
         logger.info("Book deleted", book_id=str(book_id), owner_id=str(user.id))
 

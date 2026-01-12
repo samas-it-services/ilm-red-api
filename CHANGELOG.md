@@ -20,6 +20,52 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🐛 fix: Critical admin schema bug and category filter
+
+### 📄 **Summary**
+Fix critical admin API bug where AdminBookResponse referenced non-existent fields (is_public, pages_count) instead of actual Book model fields (visibility, page_count). Add cache invalidation on book mutations. Fix mobile category filter by aligning categories with API.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/schemas/admin.py` | Modified | Fix field names: is_public → visibility, pages_count → page_count |
+| `app/api/v1/admin.py` | Modified | Update queries to use visibility and page_count |
+| `app/services/book_service.py` | Modified | Add cache invalidation on create/update/delete |
+| `tests/unit/test_admin_schemas.py` | Added | Unit tests for admin schema validation |
+| Mobile: `constants/categories.ts` | Modified | Align categories with API (add Islamic categories) |
+
+### 🧠 **Rationale**
+Admin endpoints were failing with AttributeError because the schema referenced fields that don't exist on the Book model. This was a critical bug preventing admin book management from working.
+
+Search cache was never invalidated when books were created, updated, or deleted, leading to stale results.
+
+Mobile category filter wasn't working because app categories (popular, trending) didn't match API categories (quran, hadith, fiqh, etc.).
+
+### 🔄 **Behavior / Compatibility Implications**
+- Admin book list endpoint now works correctly
+- Search cache automatically invalidated on book mutations
+- Mobile app category filter now functional
+- Mobile categories updated to match Islamic library focus
+
+### 🧪 **Testing Recommendations**
+```bash
+# Run unit tests
+poetry run pytest tests/unit/ -v
+
+# Test admin endpoints
+curl -H "Authorization: Bearer <admin_token>" \
+  http://localhost:8000/v1/admin/books?visibility=public
+
+# Test mobile category filter
+# Select "Quran" category in library screen
+```
+
+### 📌 **Follow‑ups**
+- Implement PostgreSQL full-text search (Phase 1.2)
+- Add more unit tests for other services
+
+---
+
 ## 2026-01-12 | 🧹 chore: Add Sample Data Export/Import Scripts
 
 ### 📄 **Summary**

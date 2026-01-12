@@ -228,7 +228,7 @@ List all books with search, filtering, and pagination.
 - `search`: Search by title or author
 - `category`: Filter by category
 - `owner_id`: Filter by book owner
-- `is_public`: Filter by visibility
+- `visibility`: Filter by visibility (public, private, friends)
 - `has_pages`: Filter by whether pages are generated
 
 **Requires:** Admin role
@@ -240,7 +240,7 @@ async def list_books(
     search: str | None = Query(None, description="Search term"),
     category: str | None = Query(None, description="Category filter"),
     owner_id: UUID | None = Query(None, description="Owner ID filter"),
-    is_public: bool | None = Query(None, description="Visibility filter"),
+    visibility: str | None = Query(None, description="Visibility filter"),
     has_pages: bool | None = Query(None, description="Has pages filter"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -263,13 +263,13 @@ async def list_books(
         filters.append(Book.category == category)
     if owner_id:
         filters.append(Book.owner_id == owner_id)
-    if is_public is not None:
-        filters.append(Book.is_public == is_public)
+    if visibility:
+        filters.append(Book.visibility == visibility)
     if has_pages is not None:
         if has_pages:
-            filters.append(Book.pages_count > 0)
+            filters.append(Book.page_count > 0)
         else:
-            filters.append(Book.pages_count == 0)
+            filters.append(Book.page_count == 0)
 
     if filters:
         query = query.where(and_(*filters))
@@ -295,8 +295,8 @@ async def list_books(
             owner_result = await db.execute(owner_query)
             owner_username = owner_result.scalar()
             item.owner_username = owner_username
-        # Determine processing status based on pages_count
-        item.processing_status = "ready" if book.pages_count > 0 else "pending"
+        # Determine processing status based on page_count
+        item.processing_status = "ready" if book.page_count and book.page_count > 0 else "pending"
         items.append(item)
 
     logger.info(

@@ -20,6 +20,50 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🧹 chore: Add Sample Data Export/Import Scripts
+
+### 📄 **Summary**
+Add scripts to export sanitized sample data from production Azure PostgreSQL and import it into local development database. Exported 50 books, 20 users, ratings, favorites, and chat sessions for realistic testing.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `scripts/export_prod_sample_data.py` | Added | Export sample data from production with PII sanitization |
+| `scripts/import_sample_data.py` | Added | Import sample data to local database |
+| `data/.gitignore` | Added | Exclude data files from git |
+| `data/README.md` | Added | Document data source and usage |
+
+### 🧠 **Rationale**
+The existing seed data in the repository was outdated and didn't match the current database schema. Using real production data (sanitized) provides:
+- More realistic testing scenarios
+- Verification of schema compatibility
+- Complex data relationships (ratings, favorites, chat history)
+- Books with actual metadata and categories
+
+### 🔄 **Behavior / Compatibility Implications**
+- Data is sanitized: all passwords hashed to "test123", emails changed to @test.com
+- Display names anonymized for privacy
+- Original book titles/authors preserved for testing
+- No breaking changes to existing functionality
+
+### 🧪 **Testing Recommendations**
+```bash
+# Export sample data (one-time)
+poetry run python scripts/export_prod_sample_data.py
+
+# Import to local database
+poetry run python scripts/import_sample_data.py
+
+# Test login with any user
+# Password: test123
+```
+
+### 📌 **Follow‑ups**
+- Update dev-with-data.sh to use new import script
+- Consider automating periodic data refreshes
+
+---
+
 ## 2026-01-11 | 🧹 chore: Data Migration from Supabase to Azure
 
 ### 📄 **Summary**

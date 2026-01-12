@@ -1,0 +1,7 @@
+# Exclude all data files from git
+*.json
+*.csv
+*.sql
+
+# Keep README
+!README.md

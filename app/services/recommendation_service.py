@@ -3,7 +3,7 @@
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, not_, or_, select
+from sqlalchemy import and_, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.book import Book

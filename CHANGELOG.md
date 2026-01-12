@@ -20,6 +20,57 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-11 | 🧹 chore: Data Migration from Supabase to Azure
+
+### 📄 **Summary**
+Complete data and file migration from Supabase (ilm-red-unbound) to Azure (ilm-red-api). Migrated 590 books, 34 users, 22 ratings, 37 favorites, and 83 chat sessions with all associated files to Azure Blob Storage.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `scripts/migrate_from_supabase.py` | Added | Main migration script for database records |
+| `scripts/migrate_files_incremental.py` | Added | Incremental file migration with retry logic |
+| `scripts/migrate_files_parallel.py` | Added | Parallel file migration (deprecated) |
+| `scripts/migrate_files_only.py` | Added | File-only migration script |
+
+### 🧠 **Rationale**
+
+| Migration Component | Count | Details |
+|---------------------|-------|---------|
+| Users | 34 | Profiles with generated password hashes |
+| Books | 590 | All book metadata and file references |
+| Book Files | 590 | PDFs, EPUBs, TXTs uploaded to Azure Blob |
+| Cover Images | 584 | Thumbnails uploaded to Azure Blob |
+| Ratings | 22 | User book ratings |
+| Favorites | 37 | User bookmarks |
+| Chat Sessions | 83 | AI chat history |
+
+### 🔄 **Behavior / Compatibility Implications**
+
+| Change | Impact |
+|--------|--------|
+| File paths | Books now use `{bookId}/file.{ext}` format in Azure Blob Storage |
+| Cover URLs | Covers now use `{bookId}/cover.jpg` format |
+| User passwords | All users must use "Forgot Password" to login |
+
+### 🧪 **Testing Recommendations**
+
+```bash
+# Verify file counts in Azure
+az storage blob list --account-name ilmredprodstorage --container-name books --query "length(@)"
+
+# Verify database records
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM books WHERE file_path IS NOT NULL;"
+```
+
+### 📌 **Follow‑ups**
+- [x] Complete file migration (590/590 books, 584/584 covers)
+- [x] Update database with Azure file paths
+- [ ] Migrate remaining 4 books created after initial export
+- [ ] Notify users to reset passwords
+
+---
+
 ## 2026-01-11 | 🚀 feat: Enhanced Security and Validation (v1.2.1)
 
 ### 📄 **Summary**

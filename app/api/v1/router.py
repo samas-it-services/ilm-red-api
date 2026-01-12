@@ -12,6 +12,7 @@ from app.api.v1 import (
     files,
     health,
     progress,
+    recommendations,
     search,
     users,
 )
@@ -50,3 +51,6 @@ api_router.include_router(search.router, prefix="/search", tags=["Search"])
 
 # Reading progress endpoints
 api_router.include_router(progress.router, prefix="/progress", tags=["Progress"])
+
+# Recommendations endpoints
+api_router.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])

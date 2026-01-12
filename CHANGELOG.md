@@ -20,6 +20,62 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-12 | 🚀 feat: Personalized book recommendations (Phase 5 Part 1)
+
+### 📄 **Summary**
+Add personalized book recommendation system that suggests books based on user's reading history, preferences, and top-rated content. Recommendations appear on home page and help users discover relevant books.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/schemas/recommendation.py` | Added | Recommendation response schema with reasoning |
+| `app/services/recommendation_service.py` | Added | Recommendation algorithm and business logic |
+| `app/api/v1/recommendations.py` | Added | Recommendations API endpoint |
+| `app/api/v1/router.py` | Modified | Register recommendations router |
+| `app/db/migrations/versions/20260112_1148_*.py` | Added | Book extras table migration (for future features) |
+
+### 🧠 **Rationale**
+Users need personalized content discovery to find relevant books in a large library. Generic "all books" lists don't scale well. Recommendations based on reading history and preferences improve engagement and help users find books they'll enjoy.
+
+Algorithm:
+- 40% weight: Books in categories user has been reading
+- 30% weight: Top-rated books user hasn't read (min 3 ratings)
+- 30% weight: Recently added popular books
+
+### 🔄 **Behavior / Compatibility Implications**
+- New endpoint: GET /v1/recommendations/for-you
+- Requires authentication (recommendations are personalized)
+- Returns up to 50 books (default 10)
+- Each recommendation includes reason (e.g., "Based on your interest in Fiqh")
+- Excludes books user has already read
+
+### 🧪 **Testing Recommendations**
+```bash
+# Test recommendations API
+curl http://localhost:8000/v1/recommendations/for-you?limit=10 \
+  -H "Authorization: Bearer <token>"
+
+# Expected response:
+# [
+#   {
+#     "book_id": "...",
+#     "title": "Book Title",
+#     "category": "fiqh",
+#     "reason": "Based on your interest in fiqh",
+#     "average_rating": 4.5,
+#     ...
+#   }
+# ]
+```
+
+### 📌 **Follow‑ups**
+- Add recommendations section to mobile home page
+- Implement more sophisticated algorithm (collaborative filtering)
+- Track recommendation click-through rates
+- Complete Phase 5 Part 2: Book extras (flashcards, quiz, etc.)
+
+---
+
 ## 2026-01-12 | 🐛 fix: GitHub Actions CI/CD pipeline
 
 ### 📄 **Summary**

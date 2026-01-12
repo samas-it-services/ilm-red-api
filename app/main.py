@@ -363,6 +363,34 @@ curl -X PUT /v1/books/{book_id}/progress \\
 Streak increases for each consecutive day with reading activity. Skip a day and your streak resets!
         """,
     },
+    {
+        "name": "Recommendations",
+        "description": """
+**Personalized Book Recommendations**
+
+Discover books tailored to your interests and reading history.
+
+**How It Works:**
+Our recommendation algorithm analyzes your reading patterns to suggest relevant books:
+
+1. **Category-Based** (40%) - Books in categories you've been reading
+2. **Top-Rated** (30%) - Highly-rated books you haven't read yet
+3. **Popular** (30%) - Recently added books trending in your interests
+
+**Each Recommendation Includes:**
+- Book details (title, author, cover)
+- Average rating and review count
+- **Reason**: Why we're recommending it (e.g., "Based on your interest in Fiqh")
+
+**Example:**
+```bash
+curl /v1/recommendations/for-you?limit=10 \\
+  -H "Authorization: Bearer <token>"
+```
+
+**Note:** Recommendations require authentication and reading history for personalization.
+        """,
+    },
 ]
 
 # Rich API description with getting started guide

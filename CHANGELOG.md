@@ -20,6 +20,40 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-01-21 | 🐛 fix: Correct progress API route paths causing 404 errors
+
+### 📄 **Summary**
+Fix double prefix bug in progress API routes that caused `/progress/stats` and `/progress/recent` endpoints to return 404 errors. Also updated OpenAPI spec to match actual implementation.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/api/v1/progress.py` | Modified | Remove duplicate `/progress` prefix from route decorators |
+| `openapi/api-v1.yaml` | Modified | Update progress endpoints and add missing schemas |
+
+### 🧠 **Rationale**
+The progress router was registered with prefix `/progress` in `router.py`, but the route decorators in `progress.py` also included `/progress/`, resulting in double prefix URLs like `/progress/progress/stats`. Mobile app was calling the correct URLs but getting 404s because the actual API paths were wrong.
+
+### 🔄 **Behavior / Compatibility Implications**
+- `GET /v1/progress/stats` now works (was `/v1/progress/progress/stats`)
+- `GET /v1/progress/recent` now works (was `/v1/progress/progress/recent`)
+- OpenAPI spec now correctly documents all progress endpoints
+- Added `RecentRead` and `ReadingStats` schemas to OpenAPI spec
+
+### 🧪 **Testing Recommendations**
+1. Restart API server
+2. Test with curl:
+   ```bash
+   curl -H "Authorization: Bearer $TOKEN" $API_URL/v1/progress/stats
+   curl -H "Authorization: Bearer $TOKEN" $API_URL/v1/progress/recent
+   ```
+3. Test mobile app login and home screen
+
+### 📌 **Follow‑ups**
+- None
+
+---
+
 ## 2026-01-12 | 🚀 feat: Bookmarks, highlights, and notes (Phase 6)
 
 ### 📄 **Summary**

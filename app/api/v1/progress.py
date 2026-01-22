@@ -61,7 +61,7 @@ async def delete_progress(
 
 
 @router.get(
-    "/progress/recent",
+    "/recent",
     response_model=list[RecentRead],
     summary="Get recent reads",
     description="Get your recently read books with progress.",
@@ -77,7 +77,7 @@ async def get_recent_reads(
 
 
 @router.get(
-    "/progress/stats",
+    "/stats",
     response_model=ReadingStats,
     summary="Get reading statistics",
     description="Get your reading statistics including streak and reading time.",

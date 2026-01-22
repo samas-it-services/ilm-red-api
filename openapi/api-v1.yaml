@@ -2647,7 +2647,7 @@ paths:
           description: Book added
 
   # ============= PROGRESS =============
-  /progress/{bookId}:
+  /progress/books/{bookId}/progress:
     get:
       tags:
         - Progress
@@ -2679,23 +2679,19 @@ paths:
             schema:
               type: object
               properties:
-                currentPage:
+                current_page:
                   type: integer
                   minimum: 1
-                totalPages:
+                total_pages:
                   type: integer
                   minimum: 1
-                scale:
-                  type: number
-                  minimum: 0.1
-                  maximum: 10
-                scrollPosition:
-                  type: object
-                  properties:
-                    x:
-                      type: number
-                    y:
-                      type: number
+                reading_time_seconds:
+                  type: integer
+                  minimum: 0
+                  default: 0
+              required:
+                - current_page
+                - total_pages
       responses:
         '200':
           description: Progress updated
@@ -2704,29 +2700,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReadingProgress'
 
-  /progress/history:
+    delete:
+      tags:
+        - Progress
+      summary: Reset reading progress
+      operationId: deleteProgress
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '204':
+          description: Progress deleted
+        '404':
+          description: No progress found
+
+  /progress/recent:
     get:
       tags:
         - Progress
-      summary: Get reading history
-      operationId: getProgressHistory
+      summary: Get recent reads
+      operationId: getRecentReads
       parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/LimitParam'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Number of recent reads to return
       responses:
         '200':
-          description: Reading history
+          description: Recent reads
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/ReadingProgressWithBook'
-                  pagination:
-                    $ref: '#/components/schemas/Pagination'
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentRead'
+
+  /progress/stats:
+    get:
+      tags:
+        - Progress
+      summary: Get reading statistics
+      operationId: getReadingStats
+      responses:
+        '200':
+          description: Reading statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingStats'
 
   # ============= ADMIN =============
   /admin/users:
@@ -3684,6 +3708,66 @@ components:
           properties:
             book:
               $ref: '#/components/schemas/Book'
+
+    RecentRead:
+      type: object
+      properties:
+        book_id:
+          type: string
+          format: uuid
+        book_title:
+          type: string
+        book_author:
+          type: string
+          nullable: true
+        book_cover_url:
+          type: string
+          nullable: true
+        current_page:
+          type: integer
+        total_pages:
+          type: integer
+        progress_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        last_read_at:
+          type: string
+          format: date-time
+      required:
+        - book_id
+        - book_title
+        - current_page
+        - total_pages
+        - progress_percent
+        - last_read_at
+
+    ReadingStats:
+      type: object
+      properties:
+        total_books_started:
+          type: integer
+        total_books_completed:
+          type: integer
+        total_reading_time_seconds:
+          type: integer
+        total_reading_time_formatted:
+          type: string
+          description: Formatted reading time (e.g., "10h 25m")
+        current_streak_days:
+          type: integer
+        longest_streak_days:
+          type: integer
+        avg_pages_per_day:
+          type: number
+      required:
+        - total_books_started
+        - total_books_completed
+        - total_reading_time_seconds
+        - total_reading_time_formatted
+        - current_streak_days
+        - longest_streak_days
+        - avg_pages_per_day
 
     AdminUser:
       allOf:

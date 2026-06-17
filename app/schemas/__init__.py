@@ -36,6 +36,14 @@ from app.schemas.book import (
     UserBrief,
     Visibility,
 )
+from app.schemas.book_extra import (
+    BookExtraCreate,
+    BookExtraListResponse,
+    BookExtraResponse,
+    BookExtraStatus,
+    BookExtraType,
+    BookExtraUpdate,
+)
 from app.schemas.chat import (
     BookBrief,
     ChatMessageCreate,
@@ -81,6 +89,27 @@ from app.schemas.rating import (
     RatingSummary,
     RatingUpdate,
 )
+from app.schemas.expert import (
+    ExpertConfigCreate,
+    ExpertConfigListItem,
+    ExpertConfigListResponse,
+    ExpertConfigResponse,
+    ExpertConfigUpdate,
+)
+from app.schemas.suggestion import (
+    SuggestionConfigResponse,
+    SuggestionConfigUpdate,
+    SuggestionCreate,
+    SuggestionFeedbackCreate,
+    SuggestionFeedbackResponse,
+    SuggestionListItem,
+    SuggestionListResponse,
+    SuggestionNotificationListResponse,
+    SuggestionNotificationResponse,
+    SuggestionResponse,
+    SystemConfigResponse,
+    SystemConfigUpdate,
+)
 from app.schemas.user import (
     PublicUserResponse,
     UserResponse,
@@ -119,6 +148,13 @@ __all__ = [
     "BookListResponse",
     "BookUploadResponse",
     "DownloadUrlResponse",
+    # Book Extras
+    "BookExtraCreate",
+    "BookExtraUpdate",
+    "BookExtraResponse",
+    "BookExtraListResponse",
+    "BookExtraType",
+    "BookExtraStatus",
     # Rating
     "RatingCreate",
     "RatingUpdate",
@@ -166,4 +202,23 @@ __all__ = [
     "BookChunksResponse",
     "PageCitation",
     "RAGContext",
+    # Expert
+    "ExpertConfigCreate",
+    "ExpertConfigUpdate",
+    "ExpertConfigResponse",
+    "ExpertConfigListItem",
+    "ExpertConfigListResponse",
+    # Suggestion
+    "SuggestionCreate",
+    "SuggestionFeedbackCreate",
+    "SuggestionConfigUpdate",
+    "SystemConfigUpdate",
+    "SuggestionResponse",
+    "SuggestionListItem",
+    "SuggestionListResponse",
+    "SuggestionFeedbackResponse",
+    "SuggestionNotificationResponse",
+    "SuggestionNotificationListResponse",
+    "SuggestionConfigResponse",
+    "SystemConfigResponse",
 ]

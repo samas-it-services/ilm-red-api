@@ -2,15 +2,17 @@
 
 import hashlib
 import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
 from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache.redis_client import RedisCache
 from app.config import settings
-from app.models.book import Book, Rating
+from app.models.book import Book, BookAIProcessing, Rating
 from app.models.user import User
 from app.repositories.book_repo import BookRepository
 from app.schemas.book import (
@@ -22,6 +24,8 @@ from app.schemas.book import (
     BookStats,
     BookUpdate,
     BookUploadResponse,
+    ChatEnableResponse,
+    ChatQuotaStatus,
     DownloadUrlResponse,
     UserBrief,
 )
@@ -175,12 +179,35 @@ class BookService:
         # Calculate file hash for deduplication
         file_hash = hashlib.sha256(content).hexdigest()
 
-        # Check for duplicates
-        existing = await self.repo.get_by_hash(file_hash, owner.id)
-        if existing:
+        # Duplicate detection policy:
+        #   1. Same owner already uploaded this exact file -> hard block (409).
+        #      Re-uploading the same file is always a user error.
+        #   2. A DIFFERENT owner already has this file -> allow the upload but
+        #      annotate it as a global duplicate. We deliberately do NOT block
+        #      cross-user duplicates: two users may legitimately own the same
+        #      public-domain / royalty-free file, and hard-blocking would create
+        #      false-positive copyright blocks. The duplicate is logged and
+        #      surfaced in the response so moderation tooling can review it.
+        same_owner_existing = await self.repo.get_by_hash(file_hash, owner.id)
+        if same_owner_existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Duplicate file detected. This book already exists: {existing.title}",
+                detail=(
+                    "Duplicate file detected. This book already exists: "
+                    f"{same_owner_existing.title}"
+                ),
+            )
+
+        # Global (cross-owner) duplicate check — non-blocking.
+        global_existing = await self.repo.get_by_hash(file_hash)
+        is_global_duplicate = global_existing is not None
+        if is_global_duplicate:
+            logger.info(
+                "global_duplicate_detected",
+                file_hash=file_hash,
+                owner_id=str(owner.id),
+                existing_book_id=str(global_existing.id),
+                existing_owner_id=str(global_existing.owner_id),
             )
 
         # Generate storage path
@@ -266,6 +293,7 @@ class BookService:
             status=book.status,
             file_type=book.file_type,
             file_size=book.file_size,
+            is_global_duplicate=is_global_duplicate,
         )
 
     async def get_book(
@@ -314,6 +342,172 @@ class BookService:
                 logger.warning("Failed to generate download URL", error=str(e))
 
         return self._book_to_response(book, download_url)
+
+    async def record_view(
+        self,
+        book_id: uuid.UUID,
+        viewer: User | None = None,
+    ) -> None:
+        """Atomically record a view for a book.
+
+        Increments ``stats.views`` by one using an atomic SQL UPDATE.
+
+        Policy:
+            - Owners viewing their own book do NOT increment the counter
+              (avoids self-inflated view counts).
+            - Anonymous / public reads DO increment.
+            - Never raises: view tracking is best-effort and must not break
+              the read path.
+
+        Args:
+            book_id: Book being viewed.
+            viewer: The viewing user, or ``None`` for anonymous reads.
+        """
+        try:
+            book = await self.repo.get_by_id(book_id)
+            if not book:
+                return
+
+            # Skip self-views by the owner.
+            if viewer is not None and book.owner_id == viewer.id:
+                return
+
+            await self.repo.update_stats(book_id, views_increment=1)
+            await self.db.commit()
+        except Exception as e:  # noqa: BLE001 - best-effort, never break reads
+            logger.warning("record_view_failed", book_id=str(book_id), error=str(e))
+
+    # Chat enablement (self-serve, quota-gated)
+
+    CHAT_PROCESSING_TYPE = "chat"
+
+    def _chat_quota_limit(self, user: User) -> int | None:
+        """Return the monthly chat-enable quota for a user.
+
+        Returns ``None`` for unlimited (premium/admin), otherwise the
+        configured free-tier monthly limit.
+        """
+        if user.is_premium or user.is_admin:
+            return None
+        return settings.chat_enable_monthly_quota_free
+
+    async def _count_chat_enables_this_month(self, user: User) -> int:
+        """Count books this user has enabled for chat in the current month."""
+        now = datetime.now(UTC)
+        month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
+
+        stmt = (
+            select(func.count(BookAIProcessing.id))
+            .join(Book, Book.id == BookAIProcessing.book_id)
+            .where(
+                Book.owner_id == user.id,
+                BookAIProcessing.processing_type == self.CHAT_PROCESSING_TYPE,
+                BookAIProcessing.created_at >= month_start,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one())
+
+    async def get_chat_quota_status(self, user: User) -> ChatQuotaStatus:
+        """Get the current chat-enablement quota status for a user."""
+        limit = self._chat_quota_limit(user)
+        used = await self._count_chat_enables_this_month(user)
+        if limit is None:
+            return ChatQuotaStatus(
+                used=used, limit=None, remaining=None, is_unlimited=True
+            )
+        return ChatQuotaStatus(
+            used=used,
+            limit=limit,
+            remaining=max(0, limit - used),
+            is_unlimited=False,
+        )
+
+    async def enable_chat(
+        self,
+        book_id: uuid.UUID,
+        user: User,
+    ) -> ChatEnableResponse:
+        """Enable (enqueue) AI chat processing for a book — self-serve.
+
+        Any authenticated uploader can request their own book be processed for
+        chat, subject to a monthly quota. Premium/admin users are unlimited.
+
+        Args:
+            book_id: Book to enable chat for.
+            user: Requesting user (must own the book).
+
+        Returns:
+            ChatEnableResponse with job status and quota.
+
+        Raises:
+            HTTPException: 404 if not found, 403 if not owner, 429 if quota hit.
+        """
+        book = await self.repo.get_by_id(book_id)
+        if not book:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not found",
+            )
+
+        if book.owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the owner can enable chat for this book",
+            )
+
+        # Idempotency: if a chat processing job already exists (pending/processing/
+        # completed), don't consume quota again — just report it.
+        existing_stmt = select(BookAIProcessing).where(
+            BookAIProcessing.book_id == book_id,
+            BookAIProcessing.processing_type == self.CHAT_PROCESSING_TYPE,
+        )
+        existing = (await self.db.execute(existing_stmt)).scalars().first()
+        if existing is not None:
+            return ChatEnableResponse(
+                book_id=book_id,
+                status=existing.status,
+                already_enabled=True,
+                quota=await self.get_chat_quota_status(user),
+                message="Chat processing was already enabled for this book.",
+            )
+
+        # Enforce monthly quota for non-premium users.
+        limit = self._chat_quota_limit(user)
+        if limit is not None:
+            used = await self._count_chat_enables_this_month(user)
+            if used >= limit:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        f"Monthly chat-enable quota reached ({used}/{limit}). "
+                        "Upgrade to premium for unlimited chat processing."
+                    ),
+                )
+
+        # Enqueue a chat processing job (worker picks this up asynchronously).
+        job = BookAIProcessing(
+            book_id=book_id,
+            processing_type=self.CHAT_PROCESSING_TYPE,
+            status="pending",
+        )
+        self.db.add(job)
+        await self.db.commit()
+        await self.db.refresh(job)
+
+        logger.info(
+            "chat_enable_enqueued",
+            book_id=str(book_id),
+            owner_id=str(user.id),
+            job_id=str(job.id),
+        )
+
+        return ChatEnableResponse(
+            book_id=book_id,
+            status=job.status,
+            already_enabled=False,
+            quota=await self.get_chat_quota_status(user),
+        )
 
     async def list_books(
         self,

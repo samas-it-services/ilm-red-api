@@ -6,11 +6,12 @@ All endpoints require admin or super_admin role.
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import AdminUser
+from app.api.v1.deps import AdminUser, CurrentUser, DBSession, SuperAdminUser
+from app.core.security import create_access_token, verify_access_token
 from app.db.session import get_db
 from app.models.book import Book, Rating
 from app.models.chat import ChatMessage, ChatSession
@@ -35,6 +36,132 @@ from app.schemas.admin import (
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
+
+
+# ============================================================================
+# Impersonation Endpoints
+# ============================================================================
+
+
+@router.post(
+    "/impersonate/{user_id}",
+    summary="Impersonate a user (super_admin)",
+    description="""
+Start impersonating a user. Returns a new JWT with an `impersonating_user_id` claim.
+
+When using this token, all API calls will act as the impersonated user,
+but audit logs will record the real admin's ID.
+
+**Requires:** super_admin role
+    """,
+)
+async def start_impersonation(
+    user_id: UUID,
+    super_admin_user: SuperAdminUser,
+    db: DBSession,
+) -> dict:
+    """Start impersonating a user."""
+    user_repo = UserRepository(db)
+    target_user = await user_repo.get_by_id(user_id)
+
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if target_user.status != "active":
+        raise HTTPException(status_code=400, detail="Cannot impersonate inactive user")
+
+    if "super_admin" in target_user.roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot impersonate another super_admin",
+        )
+
+    # Create a new JWT with impersonation claim
+    # The "sub" remains the admin, and "impersonating_user_id" is the target
+    token = create_access_token(
+        subject=str(super_admin_user.id),
+        extra_claims={
+            "impersonating_user_id": str(target_user.id),
+        },
+    )
+
+    logger.info(
+        "Admin started impersonation",
+        admin_id=str(super_admin_user.id),
+        target_user_id=str(target_user.id),
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "impersonating_user_id": str(target_user.id),
+        "impersonating_username": target_user.username,
+        "message": f"Now impersonating {target_user.username}",
+    }
+
+
+@router.post(
+    "/impersonate/stop",
+    summary="Stop impersonating (super_admin)",
+    description="""
+Stop impersonating a user. Returns a new JWT without the impersonation claim.
+
+**Requires:** Currently impersonating a user (super_admin)
+    """,
+)
+async def stop_impersonation(
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+) -> dict:
+    """Stop impersonating and return to admin identity."""
+    is_impersonating = getattr(request.state, "is_impersonating", False)
+    admin_id = getattr(request.state, "impersonating_admin_id", None)
+
+    if not is_impersonating or not admin_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Not currently impersonating any user",
+        )
+
+    # Create a clean JWT for the real admin
+    token = create_access_token(subject=admin_id)
+
+    logger.info(
+        "Admin stopped impersonation",
+        admin_id=admin_id,
+        was_impersonating_user_id=str(current_user.id),
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "message": "Impersonation stopped. Returned to admin identity.",
+    }
+
+
+@router.get(
+    "/impersonate/status",
+    summary="Get impersonation status",
+    description="""
+Check if the current session is impersonating a user.
+
+**Requires:** Any authenticated user
+    """,
+)
+async def get_impersonation_status(
+    request: Request,
+    current_user: CurrentUser,
+) -> dict:
+    """Get current impersonation status."""
+    is_impersonating = getattr(request.state, "is_impersonating", False)
+    admin_id = getattr(request.state, "impersonating_admin_id", None)
+
+    return {
+        "is_impersonating": is_impersonating,
+        "original_user_id": admin_id if is_impersonating else None,
+        "target_user_id": str(current_user.id) if is_impersonating else None,
+    }
 
 
 # ============================================================================

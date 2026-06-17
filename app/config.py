@@ -76,8 +76,25 @@ class Settings(BaseSettings):
     token_limit_premium: int = 100_000
     token_limit_enterprise: int = 10_000_000  # Effectively unlimited
 
+    # Self-serve chat enablement quota (books processed for chat per month)
+    # for non-premium uploaders. Premium/admin users are unlimited.
+    chat_enable_monthly_quota_free: int = 5
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    # Google OAuth
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str = "http://localhost:3000/auth/callback"
+
+    # Frontend URL
+    frontend_url: str = "http://localhost:3000"
+
+    # Stripe
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+    stripe_webhook_secret: str | None = None
 
     @computed_field
     @property

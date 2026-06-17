@@ -35,7 +35,11 @@ class RedisCache:
                     str(settings.redis_url),
                     encoding="utf-8",
                     decode_responses=True,
-                    max_connections=10,
+                    max_connections=50,
+                    socket_timeout=5,
+                    socket_connect_timeout=2,
+                    retry_on_timeout=True,
+                    health_check_interval=30,
                 )
                 cls._client = redis.Redis(connection_pool=cls._pool)
 

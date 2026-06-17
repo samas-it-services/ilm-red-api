@@ -20,6 +20,54 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-06-15 | 🚀 feat: Global dedup, wired view tracking, and self-serve chat quota
+
+### 📄 **Summary**
+Address three gap-analysis findings on the books service:
+1. **Global duplicate detection** — file-hash dedup now considers all owners, not just the uploader.
+2. **Book view tracking** — the previously-unused `update_stats(views_increment=...)` is now wired into the read path with an atomic SQL increment.
+3. **Self-serve chat enablement** — book chat processing is no longer premium-gated; any uploader can enable it within a monthly quota, and premium-model downgrades are now explicit instead of silent.
+
+A pre-existing blocker was also fixed: several models declared a column attribute literally named `metadata`, which is reserved by SQLAlchemy's Declarative API and prevented the app (and the entire test suite) from importing.
+
+### 📁 **Files Changed**
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `app/repositories/book_repo.py` | Modified | `get_by_hash` owner filter is now optional (global dedup when `owner_id=None`); `update_stats` rewritten as an atomic `UPDATE ... jsonb_set` increment |
+| `app/services/book_service.py` | Modified | Upload dedup policy (409 same-owner, allow+flag cross-owner); new `record_view`, `enable_chat`, `get_chat_quota_status`, and quota helpers |
+| `app/api/v1/books.py` | Modified | View recorded on `GET /{id}`; new `POST /{id}/view` and `POST /{id}/chat/enable` endpoints |
+| `app/services/chat_service.py` | Modified | `_select_model` returns `(model, was_downgraded)`; premium-model downgrade is explicit and surfaced via `model_downgraded` |
+| `app/schemas/book.py` | Modified | Added `is_global_duplicate` to upload response; new `ChatQuotaStatus` and `ChatEnableResponse` |
+| `app/schemas/chat.py` | Modified | Added `model_downgraded` to `ChatMessageResponse` |
+| `app/config.py` | Modified | Added `chat_enable_monthly_quota_free` (default 5) |
+| `app/models/audit.py`, `app/models/gamification.py`, `app/models/ranking.py`, `app/models/rbac.py` | Modified | Renamed reserved `metadata` mapped attribute to `audit_metadata`/`extra_metadata` (DB column unchanged) |
+| `app/services/audit_service.py`, `app/repositories/gamification_repo.py`, `app/repositories/ranking_repo.py` | Modified | Updated constructor kwargs to match renamed attributes |
+| `tests/integration/test_book_gap_features.py` | Added | Tests for all three behaviors |
+| `docs/PRD.md`, `docs/TDD.md` | Modified | Addendum documenting the new behaviors |
+
+### 🧠 **Rationale**
+- Per-owner dedup let identical files proliferate across accounts undetected. Global dedup flags this for moderation/copyright review without hard-blocking, since multiple users may legitimately own the same public-domain file.
+- View tracking existed in the repository but was never invoked; reads now count views atomically (no read-modify-write races), excluding the owner's own views.
+- Chat processing being premium-only blocked the self-serve product direction. A configurable monthly quota (default 5/month, unlimited for premium/admin) keeps it self-serve while bounding cost.
+- Silently downgrading a requested premium model hid behavior from users; the downgrade is now reported in the response.
+
+### 🔄 **Behavior / Compatibility Implications**
+- `BookUploadResponse` gains `is_global_duplicate` (additive, default `false`).
+- `ChatMessageResponse` gains `model_downgraded` (additive, default `false`).
+- New endpoints: `POST /v1/books/{id}/view` (returns `BookStats`), `POST /v1/books/{id}/chat/enable` (returns `ChatEnableResponse`, 202; 429 when quota exhausted, 403 for non-owners).
+- `GET /v1/books/{id}` now records a view as a side effect (best-effort; never fails the read).
+- The renamed `metadata` attributes keep the same DB column name, so no migration is required.
+
+### 🧪 **Testing Recommendations**
+- `tests/integration/test_book_gap_features.py` (10 tests) covers same-owner 409, cross-owner allow+flag, anonymous view increment, owner self-view skip, the view endpoint, chat-enable enqueue, idempotency, non-owner 403, free-tier quota 429, and premium bypass.
+- Requires a PostgreSQL test DB with the `vector` extension.
+
+### 📌 **Follow‑ups**
+- A worker should consume the queued `BookAIProcessing` (`processing_type="chat"`) jobs.
+- Consider monthly quota reset bookkeeping if usage rows are ever pruned (currently derived from a `created_at >= month_start` count).
+
+---
+
 ## 2026-01-21 | 🐛 fix: Correct progress API route paths causing 404 errors
 
 ### 📄 **Summary**

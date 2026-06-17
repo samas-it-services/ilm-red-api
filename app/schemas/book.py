@@ -250,6 +250,14 @@ class BookUploadResponse(BaseModel):
     file_type: str
     file_size: int
     message: str = "Book uploaded successfully. Processing will begin shortly."
+    is_global_duplicate: bool = Field(
+        default=False,
+        description=(
+            "True if an identical file (by content hash) is already owned by a "
+            "different user. The upload is still allowed; this flag is "
+            "informational for moderation/copyright review."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -260,6 +268,63 @@ class BookUploadResponse(BaseModel):
                 "file_type": "pdf",
                 "file_size": 5242880,
                 "message": "Book uploaded successfully. Processing will begin shortly.",
+                "is_global_duplicate": False,
+            }
+        }
+    )
+
+
+class ChatQuotaStatus(BaseModel):
+    """Monthly chat-enablement quota status for a user."""
+
+    used: int = Field(description="Books enabled for chat in the current month")
+    limit: int | None = Field(
+        description="Monthly limit, or null for unlimited (premium/admin)"
+    )
+    remaining: int | None = Field(
+        description="Remaining enablements this month, or null for unlimited"
+    )
+    is_unlimited: bool = Field(
+        default=False, description="True for premium/admin users (no quota)"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "used": 2,
+                "limit": 5,
+                "remaining": 3,
+                "is_unlimited": False,
+            }
+        }
+    )
+
+
+class ChatEnableResponse(BaseModel):
+    """Response after requesting chat processing for a book."""
+
+    book_id: UUID
+    status: str = Field(description="Processing job status (e.g. 'pending')")
+    already_enabled: bool = Field(
+        default=False,
+        description="True if the book was already enabled/queued for chat",
+    )
+    quota: ChatQuotaStatus
+    message: str = "Chat processing has been enqueued for this book."
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "book_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "pending",
+                "already_enabled": False,
+                "quota": {
+                    "used": 3,
+                    "limit": 5,
+                    "remaining": 2,
+                    "is_unlimited": False,
+                },
+                "message": "Chat processing has been enqueued for this book.",
             }
         }
     )

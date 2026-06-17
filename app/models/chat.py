@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -53,6 +54,20 @@ class ChatSession(Base, UUIDMixin, TimestampMixin):
 
     # Soft archive
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Wave 6: Extended session metadata
+    ai_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ai_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    session_type: Mapped[str] = mapped_column(
+        String(30), default="standard", server_default="standard"
+    )
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    expert_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    configuration: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    book_club_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="chat_sessions")
@@ -115,6 +130,12 @@ class ChatMessage(Base, UUIDMixin):
         JSONB,
         default=list,
         server_default="[]",
+    )
+
+    # Wave 6: Extended message fields
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    metadata_json: Mapped[dict] = mapped_column(
+        "metadata", JSONB, default=dict, server_default="{}"
     )
 
     # Timestamp
@@ -219,3 +240,123 @@ class MessageFeedback(Base, UUIDMixin):
     def is_negative(self) -> bool:
         """Check if feedback is negative (thumbs down)."""
         return self.rating == -1
+
+
+# ============================================================================
+# Wave 6: Extended Chat Models
+# ============================================================================
+
+
+class ChatAdminAccessLog(Base, UUIDMixin):
+    """Audit log for admin access to chat sessions."""
+
+    __tablename__ = "chat_admin_access_logs"
+
+    admin_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # view, export, delete
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+
+    # Timestamp
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    admin_user: Mapped["User"] = relationship("User", backref="chat_admin_access_logs")
+    session: Mapped["ChatSession"] = relationship("ChatSession", backref="admin_access_logs")
+
+    __table_args__ = (
+        Index("idx_chat_admin_access_admin_created", "admin_user_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ChatAdminAccessLog admin={self.admin_user_id} session={self.session_id} action={self.action}>"
+
+
+class ChatEncryptionKey(Base, UUIDMixin):
+    """Encryption keys for secure chat sessions."""
+
+    __tablename__ = "chat_encryption_keys"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    key_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
+    algorithm: Mapped[str] = mapped_column(String(50), default="AES-256-GCM", server_default="AES-256-GCM")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    session: Mapped["ChatSession"] = relationship("ChatSession", backref="encryption_key")
+
+    def __repr__(self) -> str:
+        return f"<ChatEncryptionKey session={self.session_id} v{self.key_version}>"
+
+
+class ChatMessageRating(Base, UUIDMixin):
+    """Detailed rating for individual chat messages (separate from MessageFeedback)."""
+
+    __tablename__ = "chat_message_ratings"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5 stars
+    category: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # accuracy, helpfulness, clarity
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamp
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    message: Mapped["ChatMessage"] = relationship("ChatMessage", backref="ratings")
+    user: Mapped["User"] = relationship("User", backref="chat_message_ratings")
+
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", "category", name="uq_chat_message_rating"),
+        CheckConstraint("rating >= 1 AND rating <= 5", name="check_chat_message_rating_value"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ChatMessageRating {self.rating}/5 message={self.message_id}>"

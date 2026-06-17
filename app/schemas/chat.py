@@ -125,6 +125,14 @@ class ChatMessageResponse(BaseModel):
     safety_flags: list = Field(default_factory=list)
     created_at: datetime
     has_feedback: bool = False
+    model_downgraded: bool = Field(
+        default=False,
+        description=(
+            "True when a premium model was requested by a non-premium user and "
+            "the response was generated with a free-tier model instead. The "
+            "actual model used is reported in the 'model' field."
+        ),
+    )
 
     model_config = ConfigDict(
         from_attributes=True,

@@ -16,9 +16,11 @@ from app.schemas.book import (
     BookFilters,
     BookListResponse,
     BookResponse,
+    BookStats,
     BookStatus,
     BookUpdate,
     BookUploadResponse,
+    ChatEnableResponse,
     DownloadUrlResponse,
     Visibility,
 )
@@ -148,9 +150,39 @@ async def get_book(
     """Get book details by ID.
 
     Returns full book information including stats and download URL.
+    Viewing a book records a view (atomically), except when the owner views
+    their own book.
     """
     service = BookService(db)
-    return await service.get_book(book_id, current_user)
+    response = await service.get_book(book_id, current_user)
+    # Record the view on the read path (best-effort, never blocks the response).
+    await service.record_view(book_id, current_user)
+    return response
+
+
+@router.post(
+    "/{book_id}/view",
+    response_model=BookStats,
+    summary="Record a book view",
+    description="Explicitly record a view for a book and return updated stats.",
+)
+async def record_book_view(
+    book_id: UUID,
+    db: DBSession,
+    current_user: OptionalUser,
+) -> BookStats:
+    """Record a view for a book and return the updated stats.
+
+    Owners viewing their own book do not increment the counter.
+    Anonymous reads are counted.
+    """
+    service = BookService(db)
+    # Ensure the book exists / is accessible before counting (raises 403/404).
+    await service.get_book(book_id, current_user, include_download_url=False)
+    await service.record_view(book_id, current_user)
+    # Re-read so the returned stats reflect the increment.
+    refreshed = await service.get_book(book_id, current_user, include_download_url=False)
+    return refreshed.stats
 
 
 @router.patch(
@@ -211,6 +243,37 @@ async def get_download_url(
     """
     service = BookService(db)
     return await service.get_download_url(book_id, current_user)
+
+
+# Chat enablement endpoint (self-serve, quota-gated)
+
+
+@router.post(
+    "/{book_id}/chat/enable",
+    response_model=ChatEnableResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Enable AI chat for a book",
+    description=(
+        "Enqueue AI chat processing for a book you own. Self-serve for any "
+        "uploader, subject to a monthly quota for non-premium users. "
+        "Premium/admin users are unlimited."
+    ),
+)
+async def enable_chat(
+    book_id: UUID,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> ChatEnableResponse:
+    """Enable AI chat processing for a book.
+
+    - Only the book owner can enable chat.
+    - Non-premium users are limited to a configurable number of enablements
+      per calendar month (returns 429 when the quota is exhausted).
+    - Premium and admin users have no quota.
+    - Idempotent: re-enabling an already-enabled book does not consume quota.
+    """
+    service = BookService(db)
+    return await service.enable_chat(book_id, current_user)
 
 
 # Rating endpoints

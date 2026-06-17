@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,6 +60,49 @@ class User(Base, UUIDMixin, TimestampMixin):
     # Activity tracking
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Onboarding
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Premium status
+    is_premium_user: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    # Extended profile fields
+    profile_picture_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    date_of_birth: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+
+    # Reading preferences
+    favorite_genres: Mapped[list[str]] = mapped_column(
+        ARRAY(String(50)), default=list, server_default="{}"
+    )
+    reading_goal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    language_preference: Mapped[list[str]] = mapped_column(
+        ARRAY(String(10)), default=list, server_default="{en}"
+    )
+
+    # UI and notification settings
+    dark_mode: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    bookshelf_visibility: Mapped[str] = mapped_column(
+        String(20), default="public", server_default="public"
+    )
+    developer_mode: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    ai_chat_settings: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    # Gamification
+    total_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    current_rank_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    badges_earned_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # Activity and referral
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    referral_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    referred_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     # Relationships
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         "OAuthAccount",
@@ -92,11 +135,6 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     # Helper properties for common extra_data fields
     @property
-    def full_name(self) -> str | None:
-        """Get full name from extra_data."""
-        return self.extra_data.get("full_name") if self.extra_data else None
-
-    @property
     def city(self) -> str | None:
         """Get city from extra_data."""
         return self.extra_data.get("city") if self.extra_data else None
@@ -110,11 +148,6 @@ class User(Base, UUIDMixin, TimestampMixin):
     def country(self) -> str | None:
         """Get country from extra_data."""
         return self.extra_data.get("country") if self.extra_data else None
-
-    @property
-    def date_of_birth(self) -> str | None:
-        """Get date of birth from extra_data."""
-        return self.extra_data.get("date_of_birth") if self.extra_data else None
 
 
 class OAuthAccount(Base, UUIDMixin):

@@ -352,8 +352,9 @@ Be educational, supportive, and encouraging."""
                 detail="Chat session not found",
             )
 
-        # Select model
-        model_id = self._select_model(
+        # Select model (model_downgraded is True when a premium model was
+        # requested by a non-premium user and substituted with a free default).
+        model_id, model_downgraded = self._select_model(
             user=user,
             book=session.book,
             requested_model=data.model,
@@ -418,7 +419,9 @@ Be educational, supportive, and encouraging."""
                 cost_cents=cost_cents,
             )
 
-            return self._message_to_response(assistant_message)
+            return self._message_to_response(
+                assistant_message, model_downgraded=model_downgraded
+            )
 
         except RateLimitError as e:
             logger.warning(
@@ -475,7 +478,7 @@ Be educational, supportive, and encouraging."""
             )
 
         # Select model
-        model_id = self._select_model(
+        model_id, _model_downgraded = self._select_model(
             user=user,
             book=session.book,
             requested_model=data.model,
@@ -720,7 +723,7 @@ Be educational, supportive, and encouraging."""
         user: User,
         book: Book | None,
         requested_model: str | None,
-    ) -> str:
+    ) -> tuple[str, bool]:
         """Select the appropriate model for a request.
 
         Args:
@@ -729,7 +732,11 @@ Be educational, supportive, and encouraging."""
             requested_model: User's requested model (if any)
 
         Returns:
-            Model ID to use
+            Tuple of ``(model_id, was_downgraded)`` where ``was_downgraded`` is
+            ``True`` when the caller requested a premium-tier model they are not
+            entitled to and we substituted a free-tier default instead. Callers
+            should surface this flag to the user rather than silently swapping
+            models.
         """
         # If user requested a specific model, validate it
         if requested_model:
@@ -739,24 +746,32 @@ Be educational, supportive, and encouraging."""
                     requested=requested_model,
                     user_id=str(user.id),
                 )
-                # Fall through to default selection
+                # Unknown model -> fall through to default (not a tier downgrade)
+            elif requested_model in FREE_TIER_MODELS or user.is_premium:
+                # Free-tier models are available to everyone; premium/admin
+                # users may use any registered model.
+                return requested_model, False
             else:
-                # Check if user can access this model (free tier check)
-                # TODO: Add premium tier check when billing is implemented
-                if requested_model not in FREE_TIER_MODELS:
-                    logger.warning(
-                        "premium_model_requested_by_free_user",
-                        requested=requested_model,
-                        user_id=str(user.id),
-                    )
-                    # Fall through to default
-                else:
-                    return requested_model
+                # Premium model requested by a non-premium user. We do NOT hard
+                # fail (less breaking); instead we downgrade to a free default
+                # and EXPLICITLY signal the downgrade so the response can tell
+                # the user which model actually ran.
+                logger.info(
+                    "premium_model_downgraded",
+                    requested=requested_model,
+                    user_id=str(user.id),
+                )
+                fallback = (
+                    DEFAULT_MODEL_PUBLIC
+                    if book and book.visibility == "public"
+                    else DEFAULT_MODEL_PRIVATE
+                )
+                return fallback, True
 
         # Default model selection based on book visibility
         if book and book.visibility == "public":
-            return DEFAULT_MODEL_PUBLIC
-        return DEFAULT_MODEL_PRIVATE
+            return DEFAULT_MODEL_PUBLIC, False
+        return DEFAULT_MODEL_PRIVATE, False
 
     def _get_system_prompt(self, book: Book | None) -> str:
         """Get the system prompt for the conversation.
@@ -866,11 +881,17 @@ Be educational, supportive, and encouraging."""
             messages=[self._message_to_response(m) for m in messages],
         )
 
-    def _message_to_response(self, message: ChatMessage) -> ChatMessageResponse:
+    def _message_to_response(
+        self,
+        message: ChatMessage,
+        model_downgraded: bool = False,
+    ) -> ChatMessageResponse:
         """Convert message model to response schema.
 
         Args:
             message: ChatMessage model
+            model_downgraded: True if a premium model was downgraded to a
+                free-tier model for this response.
 
         Returns:
             ChatMessageResponse
@@ -888,4 +909,5 @@ Be educational, supportive, and encouraging."""
             safety_flags=message.safety_flags,
             created_at=message.created_at,
             has_feedback=message.feedback is not None if hasattr(message, 'feedback') else False,
+            model_downgraded=model_downgraded,
         )

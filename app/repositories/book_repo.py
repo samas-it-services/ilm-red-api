@@ -4,7 +4,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import String, and_, cast, func, or_, select, update
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -78,21 +79,29 @@ class BookRepository:
     async def get_by_hash(
         self,
         file_hash: str,
-        owner_id: uuid.UUID,
+        owner_id: uuid.UUID | None = None,
     ) -> Book | None:
-        """Get book by file hash and owner (for duplicate detection)."""
-        stmt = (
-            select(Book)
-            .where(
-                and_(
-                    Book.file_hash == file_hash,
-                    Book.owner_id == owner_id,
-                    Book.deleted_at.is_(None),
-                )
-            )
-        )
+        """Get book by file hash for duplicate detection.
+
+        Args:
+            file_hash: SHA256 hash of the file content.
+            owner_id: If provided, scope the lookup to a single owner
+                (per-owner dedup). If ``None``, search across ALL owners
+                (global dedup).
+
+        Returns:
+            The first matching non-deleted book, or ``None``.
+        """
+        conditions = [
+            Book.file_hash == file_hash,
+            Book.deleted_at.is_(None),
+        ]
+        if owner_id is not None:
+            conditions.append(Book.owner_id == owner_id)
+
+        stmt = select(Book).where(and_(*conditions))
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def list_books(
         self,
@@ -242,14 +251,44 @@ class BookRepository:
         views_increment: int = 0,
         downloads_increment: int = 0,
     ) -> None:
-        """Update book stats atomically."""
-        book = await self.get_by_id(book_id)
-        if book:
-            stats = book.stats.copy()
-            stats["views"] = stats.get("views", 0) + views_increment
-            stats["downloads"] = stats.get("downloads", 0) + downloads_increment
-            book.stats = stats
-            await self.db.flush()
+        """Increment book stats atomically.
+
+        Uses a single SQL ``UPDATE ... SET stats = jsonb_set(...)`` so concurrent
+        readers do not lose increments (avoids read-modify-write races).
+        """
+        if views_increment == 0 and downloads_increment == 0:
+            return
+
+        # Build an atomic JSONB update. COALESCE handles legacy rows where a
+        # stats key may be missing. Cast existing value to int, add increment,
+        # then store back as a JSONB number.
+        stats_expr = Book.stats
+        if views_increment:
+            stats_expr = func.jsonb_set(
+                stats_expr,
+                cast(["views"], ARRAY(String)),  # jsonb_set path must be text[]
+                func.to_jsonb(
+                    func.coalesce(Book.stats["views"].as_integer(), 0)
+                    + views_increment
+                ),
+            )
+        if downloads_increment:
+            stats_expr = func.jsonb_set(
+                stats_expr,
+                cast(["downloads"], ARRAY(String)),
+                func.to_jsonb(
+                    func.coalesce(Book.stats["downloads"].as_integer(), 0)
+                    + downloads_increment
+                ),
+            )
+
+        stmt = (
+            update(Book)
+            .where(Book.id == book_id, Book.deleted_at.is_(None))
+            .values(stats=stats_expr)
+        )
+        await self.db.execute(stmt)
+        await self.db.flush()
 
     # Rating operations
 

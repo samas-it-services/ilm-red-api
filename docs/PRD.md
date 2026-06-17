@@ -1492,3 +1492,28 @@ X-RateLimit-RetryAfter: 30
 | 2.1.0 | Jan 2026 | saMas IT Services | Added Admin API documentation (FR-ADMIN-001 to FR-ADMIN-005) |
 | 2.0.0 | Jan 2026 | ILM Red Team | Added AI chat, billing, page browsing requirements |
 | 1.0.0 | Jan 2025 | ILM Red Team | Initial version |
+| 2.2.0 | 2026-06-15 | Analysis | Added Current-State Reconciliation addendum (see below) |
+
+---
+
+## Addendum — Current-State Reconciliation & Gaps (2026-06-15)
+
+> Records where this PRD diverges from the code as actually built. Full cross-repo analysis incl. the four user-reported issues is in `../../GAP_ANALYSIS_AND_REPORTED_ISSUES_2026-06-15.md`.
+
+**Stack correction (important).** The body of this PRD, plus `TDD.md`, `ARCHITECTURE.md`, and `CLAUDE.md`, describe a **Node.js / TypeScript / Fastify / Azure Cosmos DB / Azure AI Search / Microsoft Fabric / Zod** stack with a 12-microservice decomposition. The implemented backend is a **Python 3.12 / FastAPI / SQLAlchemy-async / PostgreSQL + pgvector / Redis (ARQ)** monolith — 247 routes across 31 routers. Only `README.md` reflects the real stack. Treat the architecture/stack sections of this document as historical until rewritten.
+
+**Shipped but absent from this PRD/TDD:** premium/Stripe billing, gamification, rankings, addon marketplace, blog, help center, announcements, quotes, public Q&A, experts, suggestions, director dashboard.
+
+**Gaps relevant to the reported issues:**
+- **View tracking:** `Book.stats.views` + `book_repo.update_stats(views_increment=…)` exist but are **never called** — view counts stay 0. Only `downloads_increment` is wired (`book_service.py:490`).
+- **Book comments:** not a feature — only `Rating.review` (one per user/book). Threaded comments exist only for blog/club discussions.
+- **Duplicate detection:** SHA-256 dedup is **per-owner only** (`book_repo.py:88-90`) — identical files from different users are not detected. Recommend global dedup + a backfill of existing books.
+- **Chat / premium gating:** the premium-tier check in chat is a **stub** — free users are silently downgraded, not blocked (`chat_service.py:744-754`). RBAC deps exist but aren't wired into chat.
+- **Issue/error reporting:** records are persisted only; there is **no notification/email/alert** on submission (`issue_service.py`, `error_log_service.py`).
+
+**Open TODOs:** admin page-generation queue (`admin.py:506`); S3 storage provider `NotImplementedError` (`storage/__init__.py:23`).
+
+**Resolved (2026-06-15):**
+- **View tracking — DONE.** `GET /v1/books/{id}` now records a view via an atomic `update_stats(views_increment=1)`; a dedicated `POST /v1/books/{id}/view` is also available. Owners do not increment their own views; anonymous reads do count.
+- **Duplicate detection — global + non-blocking.** `book_repo.get_by_hash` now accepts an optional `owner_id` (global lookup when omitted). Upload returns **409 for same-owner** re-uploads and **allows cross-owner duplicates** while setting `is_global_duplicate=true` on the response (logged for moderation). Cross-user uploads are intentionally not hard-blocked to avoid false-positive copyright blocks.
+- **Chat enablement — self-serve with quota.** Chat processing is no longer premium-only. `POST /v1/books/{id}/chat/enable` lets any owner enqueue processing within a configurable monthly quota (`chat_enable_monthly_quota_free`, default 5); premium/admin are unlimited (429 when exhausted). The premium-**model** downgrade is now explicit: non-premium users requesting a premium model get the free-tier model with `model_downgraded=true` in the response instead of a silent swap.

@@ -477,6 +477,88 @@ paths:
                     type: string
                     format: date-time
 
+  /books/{bookId}/view:
+    post:
+      tags:
+        - Books
+      summary: Record a book view
+      description: >-
+        Atomically increments the book's view counter and returns the updated
+        stats. The owner viewing their own book does not increment the counter;
+        anonymous reads are counted. A view is also recorded as a side effect of
+        GET /books/{bookId}.
+      operationId: recordBookView
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '200':
+          description: Updated book stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  views:
+                    type: integer
+                  downloads:
+                    type: integer
+                  rating_count:
+                    type: integer
+                  rating_avg:
+                    type: number
+                    format: float
+
+  /books/{bookId}/chat/enable:
+    post:
+      tags:
+        - Books
+      summary: Enable AI chat for a book
+      description: >-
+        Enqueue AI chat processing for a book you own. Self-serve for any
+        uploader, subject to a monthly quota for non-premium users
+        (default 5/month). Premium and admin users are unlimited. Idempotent:
+        re-enabling an already-enabled book does not consume quota.
+      operationId: enableBookChat
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookIdParam'
+      responses:
+        '202':
+          description: Chat processing enqueued (or already enabled)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: pending
+                  already_enabled:
+                    type: boolean
+                  message:
+                    type: string
+                  quota:
+                    type: object
+                    properties:
+                      used:
+                        type: integer
+                      limit:
+                        type: integer
+                        nullable: true
+                      remaining:
+                        type: integer
+                        nullable: true
+                      is_unlimited:
+                        type: boolean
+        '403':
+          description: Caller is not the book owner
+        '429':
+          description: Monthly chat-enable quota exhausted (non-premium users)
+
   /books/{bookId}/thumbnail:
     put:
       tags:

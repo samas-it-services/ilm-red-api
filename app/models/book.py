@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -15,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -104,6 +106,21 @@ class Book(Base, UUIDMixin, TimestampMixin):
 
     # Soft delete
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Wave 6: Extended book metadata
+    ai_processed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    copyright_check_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    copyright_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    user_copyright_declaration: Mapped[str | None] = mapped_column(Text, nullable=True)
+    royalty_free_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    download_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(String(50)), default=list, server_default="{}"
+    )
 
     # Relationships
     owner: Mapped["User"] = relationship("User", backref="books")
@@ -238,3 +255,134 @@ class Favorite(Base):
 
     def __repr__(self) -> str:
         return f"<Favorite user={self.user_id} book={self.book_id}>"
+
+
+# ============================================================================
+# Wave 6: Extended Book Models
+# ============================================================================
+
+
+class BookAIProcessing(Base, UUIDMixin, TimestampMixin):
+    """Tracks AI processing jobs for books (embeddings, summaries, etc.)."""
+
+    __tablename__ = "book_ai_processing"
+
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    processing_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # embedding, summary, keywords, classification
+    status: Mapped[str] = mapped_column(
+        String(30), default="pending", server_default="pending"
+    )  # pending, processing, completed, failed
+    ai_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    result_data: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+
+    # Relationships
+    book: Mapped["Book"] = relationship("Book", backref="ai_processing_jobs")
+
+    __table_args__ = (
+        Index("idx_book_ai_processing_book_type", "book_id", "processing_type"),
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="check_ai_processing_status",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<BookAIProcessing book={self.book_id} type={self.processing_type} status={self.status}>"
+
+
+class BookSummary(Base, UUIDMixin, TimestampMixin):
+    """AI-generated summaries for books at various levels."""
+
+    __tablename__ = "book_summaries"
+
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    summary_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # brief, detailed, chapter, key_points
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(String(10), default="en", server_default="en")
+    ai_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    chapter_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chapter_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    word_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Relationships
+    book: Mapped["Book"] = relationship("Book", backref="summaries")
+
+    __table_args__ = (
+        Index("idx_book_summaries_book_type", "book_id", "summary_type"),
+        UniqueConstraint(
+            "book_id", "summary_type", "language", "chapter_number",
+            name="uq_book_summary_type_lang_chapter",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<BookSummary book={self.book_id} type={self.summary_type}>"
+
+
+class BookPageGenerationJob(Base, UUIDMixin, TimestampMixin):
+    """Tracks page image generation jobs for PDF books."""
+
+    __tablename__ = "book_page_generation_jobs"
+
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default="pending", server_default="pending"
+    )  # pending, processing, completed, failed
+    total_pages: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pages_completed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pages_failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    resolution: Mapped[str] = mapped_column(
+        String(20), default="high", server_default="high"
+    )  # thumbnail, medium, high, ultra
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    triggered_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    job_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    # Relationships
+    book: Mapped["Book"] = relationship("Book", backref="page_generation_jobs")
+
+    __table_args__ = (
+        Index("idx_page_gen_jobs_book_status", "book_id", "status"),
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="check_page_gen_status",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<BookPageGenerationJob book={self.book_id} {self.pages_completed}/{self.total_pages}>"
+
+    @property
+    def progress_percent(self) -> int:
+        """Calculate completion percentage."""
+        if self.total_pages == 0:
+            return 0
+        return int((self.pages_completed / self.total_pages) * 100)

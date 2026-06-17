@@ -5,18 +5,22 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
+    Text,
+    UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -322,3 +326,151 @@ class UsageLimit(Base):
         """Reset monthly usage counters."""
         self.monthly_cost_used_cents = 0
         self.monthly_reset_at = datetime.now(UTC)
+
+
+# ============================================================================
+# Wave 6: Extended Billing Models
+# ============================================================================
+
+
+class AIBillingConfig(Base, UUIDMixin, TimestampMixin):
+    """Key-value configuration for AI billing settings."""
+
+    __tablename__ = "ai_billing_config"
+
+    config_key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    config_value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<AIBillingConfig {self.config_key}>"
+
+
+class UserAIBilling(Base, UUIDMixin, TimestampMixin):
+    """Per-user AI billing account tracking credits and usage."""
+
+    __tablename__ = "user_ai_billing"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    monthly_credit_limit: Mapped[int] = mapped_column(Integer, default=100, server_default="100")
+    current_month_usage: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    current_month_credits_remaining: Mapped[int] = mapped_column(
+        Integer, default=100, server_default="100"
+    )
+    total_lifetime_usage: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    current_billing_period_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    current_billing_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    auto_recharge_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    auto_recharge_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    auto_recharge_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", backref="ai_billing")
+
+    def __repr__(self) -> str:
+        return f"<UserAIBilling user={self.user_id} remaining={self.current_month_credits_remaining}>"
+
+
+class AIUsageRecord(Base, UUIDMixin):
+    """Per-message AI usage tracking for cost attribution."""
+
+    __tablename__ = "ai_usage_records"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    book_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    book_club_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    chat_session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    ai_model: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ai_cost_usd: Mapped[float] = mapped_column(Numeric(10, 6), default=0, server_default="0")
+    billed_cost_usd: Mapped[float] = mapped_column(Numeric(10, 6), default=0, server_default="0")
+    request_metadata: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    # Timestamp
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", backref="ai_usage_records")
+
+    __table_args__ = (
+        Index("idx_ai_usage_records_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AIUsageRecord user={self.user_id} model={self.ai_model} tokens={self.total_tokens}>"
+
+
+class MonthlyBillingSummary(Base, UUIDMixin):
+    """Aggregated monthly billing reports per user."""
+
+    __tablename__ = "monthly_billing_summaries"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    total_tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    total_ai_cost_usd: Mapped[float] = mapped_column(
+        Numeric(10, 6), default=0, server_default="0"
+    )
+    total_billed_cost_usd: Mapped[float] = mapped_column(
+        Numeric(10, 6), default=0, server_default="0"
+    )
+    credits_purchased: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    credits_granted: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    credits_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    credits_remaining: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", backref="monthly_billing_summaries")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "year", "month", name="uq_monthly_billing_user_year_month"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<MonthlyBillingSummary user={self.user_id} {self.year}-{self.month:02d}>"

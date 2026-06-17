@@ -1,11 +1,17 @@
 """User endpoints."""
 
+from datetime import UTC, datetime
+from uuid import UUID
+
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import CurrentUser
+from app.api.v1.deps import CurrentUser, DBSession, OptionalUser
 from app.db.session import get_db
+from app.models.book import Book
+from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import PublicUserResponse, UserResponse, UserUpdate
 
@@ -119,6 +125,114 @@ async def update_current_user_profile(
     return UserResponse.model_validate(current_user)
 
 
+# ============================================================================
+# Wave 6: Onboarding Endpoints (must be before /{user_id} routes)
+# ============================================================================
+
+
+@router.get(
+    "/me/onboarding",
+    summary="Get onboarding status",
+    description="""
+Get the current user's onboarding status and progress.
+
+**Requires:** Bearer token authentication
+    """,
+)
+async def get_onboarding_status(
+    current_user: CurrentUser,
+) -> dict:
+    """Get the current user's onboarding status."""
+    extra_data = current_user.extra_data or {}
+    onboarding_data = extra_data.get("onboarding", {})
+
+    return {
+        "onboarding_completed": current_user.onboarding_completed,
+        "onboarding_completed_at": (
+            current_user.onboarding_completed_at.isoformat()
+            if current_user.onboarding_completed_at
+            else None
+        ),
+        "onboarding_data": onboarding_data,
+    }
+
+
+@router.post(
+    "/me/onboarding/complete",
+    summary="Mark onboarding completed",
+    description="""
+Mark the current user's onboarding as completed.
+
+**Requires:** Bearer token authentication
+    """,
+)
+async def complete_onboarding(
+    current_user: CurrentUser,
+    db: DBSession,
+) -> dict:
+    """Mark onboarding as completed."""
+    if current_user.onboarding_completed:
+        return {
+            "message": "Onboarding already completed",
+            "onboarding_completed": True,
+            "onboarding_completed_at": (
+                current_user.onboarding_completed_at.isoformat()
+                if current_user.onboarding_completed_at
+                else None
+            ),
+        }
+
+    user_repo = UserRepository(db)
+    now = datetime.now(UTC)
+    user = await user_repo.update(
+        current_user,
+        onboarding_completed=True,
+        onboarding_completed_at=now,
+    )
+
+    logger.info("User completed onboarding", user_id=str(current_user.id))
+
+    return {
+        "message": "Onboarding completed successfully",
+        "onboarding_completed": True,
+        "onboarding_completed_at": now.isoformat(),
+    }
+
+
+@router.put(
+    "/me/onboarding",
+    summary="Save partial onboarding data",
+    description="""
+Save partial onboarding progress data. This allows the frontend to persist
+onboarding state across sessions without marking it as complete.
+
+**Requires:** Bearer token authentication
+    """,
+)
+async def save_onboarding_data(
+    data: dict,
+    current_user: CurrentUser,
+    db: DBSession,
+) -> dict:
+    """Save partial onboarding data."""
+    user_repo = UserRepository(db)
+
+    # Merge onboarding data into extra_data
+    existing_extra = current_user.extra_data or {}
+    existing_onboarding = existing_extra.get("onboarding", {})
+    existing_onboarding.update(data)
+    existing_extra["onboarding"] = existing_onboarding
+
+    await user_repo.update(current_user, extra_data=existing_extra)
+
+    logger.info("User saved onboarding data", user_id=str(current_user.id))
+
+    return {
+        "message": "Onboarding data saved",
+        "onboarding_data": existing_onboarding,
+    }
+
+
 @router.get(
     "/{user_id}",
     response_model=PublicUserResponse,
@@ -149,10 +263,188 @@ async def get_user_profile(
     """Get a user's public profile."""
     user_repo = UserRepository(db)
 
-    from uuid import UUID
     user = await user_repo.get_by_id(UUID(user_id))
 
     if not user or user.status != "active":
         raise HTTPException(status_code=404, detail="User not found")
 
     return PublicUserResponse.model_validate(user)
+
+
+# ============================================================================
+# Wave 6: Public Profile + Onboarding Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/{user_id}/public-profile",
+    summary="Get user public profile with stats",
+    description="""
+Get a user's public profile including statistics like book count and activity.
+
+**Includes:** Username, avatar, bio, public book count, join date
+**Excludes:** Email, preferences, private data
+
+**Note:** Authentication is optional. Authenticated users may see more details.
+    """,
+)
+async def get_user_public_profile(
+    user_id: UUID,
+    db: DBSession,
+    current_user: OptionalUser = None,
+) -> dict:
+    """Get a user's public profile with statistics."""
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
+
+    if not user or user.status != "active":
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Count public books
+    public_books_count = await db.scalar(
+        select(func.count()).select_from(Book).where(
+            Book.owner_id == user.id,
+            Book.visibility == "public",
+            Book.deleted_at.is_(None),
+        )
+    ) or 0
+
+    # Count total books (only if viewing own profile)
+    total_books_count = None
+    if current_user and current_user.id == user.id:
+        total_books_count = await db.scalar(
+            select(func.count()).select_from(Book).where(
+                Book.owner_id == user.id,
+                Book.deleted_at.is_(None),
+            )
+        ) or 0
+
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
+        "bio": user.bio,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "public_books_count": public_books_count,
+        "total_books_count": total_books_count,
+        "is_premium": user.is_premium,
+    }
+
+
+@router.get(
+    "/{user_id}/public-books",
+    summary="Get user's public books",
+    description="""
+Get a paginated list of a user's public books.
+
+**Note:** Authentication is optional.
+    """,
+)
+async def get_user_public_books(
+    user_id: UUID,
+    db: DBSession,
+    current_user: OptionalUser = None,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+) -> dict:
+    """Get a user's public books."""
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
+
+    if not user or user.status != "active":
+        raise HTTPException(status_code=404, detail="User not found")
+
+    query = select(Book).where(
+        Book.owner_id == user.id,
+        Book.visibility == "public",
+        Book.deleted_at.is_(None),
+    )
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size).order_by(Book.created_at.desc())
+
+    result = await db.execute(query)
+    books = result.scalars().all()
+
+    items = [
+        {
+            "id": str(book.id),
+            "title": book.title,
+            "author": book.author,
+            "description": book.description,
+            "category": book.category,
+            "cover_url": book.cover_url,
+            "page_count": book.page_count,
+            "created_at": book.created_at.isoformat() if book.created_at else None,
+        }
+        for book in books
+    ]
+
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
+
+
+@router.get(
+    "/{user_id}/public-activity",
+    summary="Get user's public activity",
+    description="""
+Get a user's recent public activity (books added, ratings, etc.).
+
+**Note:** Authentication is optional.
+    """,
+)
+async def get_user_public_activity(
+    user_id: UUID,
+    db: DBSession,
+    current_user: OptionalUser = None,
+    limit: int = Query(20, ge=1, le=50, description="Number of activities"),
+) -> dict:
+    """Get a user's public activity feed."""
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
+
+    if not user or user.status != "active":
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get recent public books as activity
+    recent_books_query = (
+        select(Book)
+        .where(
+            Book.owner_id == user.id,
+            Book.visibility == "public",
+            Book.deleted_at.is_(None),
+        )
+        .order_by(Book.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(recent_books_query)
+    recent_books = result.scalars().all()
+
+    activities = [
+        {
+            "type": "book_added",
+            "book_id": str(book.id),
+            "title": book.title,
+            "category": book.category,
+            "timestamp": book.created_at.isoformat() if book.created_at else None,
+        }
+        for book in recent_books
+    ]
+
+    return {
+        "user_id": str(user.id),
+        "activities": activities,
+        "total": len(activities),
+    }

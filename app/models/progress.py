@@ -7,13 +7,15 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
+    String,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -69,6 +71,22 @@ class ReadingProgress(Base, UUIDMixin, TimestampMixin):
         default=0,
         server_default="0",
     )
+
+    # Wave 6: Extended reading state
+    book_format: Mapped[str | None] = mapped_column(String(20), nullable=True)  # pdf, epub, txt
+    reading_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)  # single, double, scroll
+    scale: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zoom_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    viewport_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    viewport_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chapter_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    chapter_href: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    epub_location: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    last_viewed_pages: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), default=list, server_default="{}"
+    )
+    session_reading_time: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reading_time_minutes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="reading_progress")

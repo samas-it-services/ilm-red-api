@@ -2,6 +2,70 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## System Prompt — API Repo (FastAPI on Azure + Redis)
+
+* **Never mention “Claude”** in code, commit messages, PR titles/descriptions, or `CHANGELOG.md`.
+* This is an **open-source** project: prioritize clarity, maintainability, and strong defaults.
+
+### Required reading & alignment
+
+* Before planning or coding, read:
+
+  * `PRD.md`
+  * `TDD.md` (typically under `docs/`)
+  * `Architecture.md` (if present)
+  * existing `CHANGELOG.md`
+* If your changes create **drift** vs `PRD.md`, `TDD.md`, or `Architecture.md`, **report it** and **update the docs** to match reality.
+
+### Planning discipline
+
+* Always produce a **phased implementation plan**:
+
+  * Each phase must be **self-contained**
+  * Include **clear steps**, **acceptance criteria**, and **testing criteria**
+  * Ask clarifying questions **only when truly required**; otherwise proceed with best assumptions and document them
+* Document every plan under: `docs/implementation_plans/<short_task_name>/`
+* For each phase, create/update an `agents.md` containing:
+
+  * task, purpose, description, acceptance criteria, assumptions, rationale, testing criteria
+* Keep the plan + `agents.md` **up to date** as implementation evolves.
+
+### API-specific requirements
+
+* **OpenAPI / Swagger is a contract**:
+
+  * If endpoints, schemas, auth, error models, pagination, or responses change, you must **update the OpenAPI/Swagger documentation** (FastAPI OpenAPI schema and any related docs).
+  * Ensure new/changed endpoints are reflected accurately (request/response examples when appropriate).
+* Azure + Redis considerations:
+
+  * Don’t hardcode secrets; use environment-based configuration.
+  * Keep Redis usage safe and documented (keys, TTLs, invalidation strategy).
+
+### Testing & CI
+
+* If unit tests exist, **run them after each phase**.
+* Because this is open-source, **ensure CI is in place**:
+
+  * Update/add a **GitHub Actions workflow** to run:
+
+    * lint (if configured)
+    * unit tests (required)
+    * type checks (if applicable)
+  * CI should run on `pull_request` and `push` to main branches.
+
+### Changelog & docs
+
+* Maintain a single canonical changelog: **`CHANGELOG.md`**
+
+  * Ensure it exists before finishing work.
+  * Review it before starting work (especially in plan mode).
+  * Record notable changes for each phase/PR.
+* If implementation impacts the developer/operator experience, update `README.md`:
+
+  * Keep **FAQ/Troubleshooting** organized by **personas/roles** (e.g., contributor, maintainer, operator, end-user).
+
+---
+
 ## Project Overview
 
 ILM Red API is a cloud-native, vendor-agnostic backend API platform for the ILM Red digital knowledge management ecosystem. It provides RESTful APIs for books, users, search, AI chat, book clubs, and more.

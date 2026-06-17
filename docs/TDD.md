@@ -4043,3 +4043,21 @@ class MigrationRunner {
   }
 }
 ```
+
+---
+
+## Addendum — Current-State Reconciliation (2026-06-15)
+
+> Full cross-repo gap analysis and the four reported-issue root-causes are in `../../GAP_ANALYSIS_AND_REPORTED_ISSUES_2026-06-15.md`.
+
+**This TDD describes the wrong stack.** All code samples above are **TypeScript/Fastify/Cosmos DB/Mongo-session-style**, but the implemented service is **Python 3.12 / FastAPI / SQLAlchemy-async / PostgreSQL + pgvector / Alembic / Redis (ARQ) / Stripe**, layered `api/v1 → services → repositories → models` with Pydantic schemas. The TS examples here do not correspond to any file in `app/`. Treat this document as design-intent history pending a Python rewrite.
+
+**Test reality:** the testing strategy/sections describe Jest-style TS tests; the repo uses **pytest** (`tests/`). The TDD's coverage targets are aspirational — several follow-ups in `CHANGELOG.md` still call for chat-service unit tests, billing integration tests, and per-AI-provider integration tests.
+
+**Implementation gaps confirmed against code (see PRD addendum for detail):** view-count increment never invoked; per-owner-only duplicate detection; stubbed premium gating in chat (`chat_service.py:744-754`); no notifications on issue/error submission; S3 storage provider not implemented (`storage/__init__.py:23`); admin page-generation queue is a TODO (`admin.py:506`).
+
+**Resolved (2026-06-15) — design notes:**
+- **Atomic view increment.** `book_repo.update_stats` was rewritten from read-modify-write to a single `UPDATE books SET stats = jsonb_set(stats, '{views}', to_jsonb(coalesce((stats->>'views')::int,0)+1))` (the `jsonb_set` path is cast to `text[]`). Wired into `BookService.record_view`, called from `GET /v1/books/{id}` and `POST /v1/books/{id}/view`; skips owner self-views and is best-effort (failures are logged, never raised).
+- **Global dedup.** `BookRepository.get_by_hash(file_hash, owner_id=None)` searches all owners when `owner_id` is omitted. `BookService.upload_book` checks same-owner first (409), then global (allow + `is_global_duplicate` flag). The `idx_books_owner_hash` index plus the `file_hash` index on `Book` support both lookups.
+- **Self-serve chat quota.** `BookService.enable_chat` enqueues a `BookAIProcessing` row (`processing_type="chat"`, status `pending`) and is idempotent per book. The monthly quota for non-premium users is derived by counting that user's chat-processing rows created since the start of the calendar month against `settings.chat_enable_monthly_quota_free`; premium/admin (`User.is_premium` / `is_admin`) bypass the limit. `ChatService._select_model` now returns `(model_id, was_downgraded)` so the premium-model downgrade is surfaced via `ChatMessageResponse.model_downgraded`.
+- **SQLAlchemy `metadata` collision fix.** `AuditLog`, `RoleAssignmentLog`, the ranking/gamification ledgers, and the badge/activity models declared a column literally named `metadata` (reserved by the Declarative API), which broke app import. The Python attributes are now `audit_metadata`/`extra_metadata` mapped to the unchanged `metadata` DB column (no migration needed).
